@@ -1,0 +1,5 @@
+# Python 编译缓存文件及文件夹
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
