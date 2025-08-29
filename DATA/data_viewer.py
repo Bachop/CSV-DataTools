@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (QDialog, QFileDialog, QPushButton, QVBoxLayout, QHB
                              QAbstractItemView, QComboBox, QTextEdit,
                              QFrame, QListWidget, QListWidgetItem, 
                              QDialogButtonBox, QMessageBox, QDesktopWidget, QWidget,
-                             QSizePolicy, QLineEdit, QScrollArea)
+                             QSizePolicy, QLineEdit, QScrollArea,QInputDialog)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QCursor
 
@@ -25,6 +25,7 @@ from .column_selection_dialog import ColumnSelectionDialog
 from .states_lookup import StatesLookupWindow, StatesColumnSelectionDialog
 from .normal_distribution import plot_normal_distribution  # 导入正态分布函数
 from .scatter_plot import plot_scatter  # 导入散点图函数
+from .offset_test import OffsetTestDialog  # 导入新的偏移检测对话框
 
 class DataViewer(QDialog):
     """数据查看窗口，显示CSV内容并提供数据处理功能"""
@@ -103,9 +104,16 @@ class DataViewer(QDialog):
         # 添加UID数据处理按钮
         self.uid_analysis_btn = QPushButton("UID数据处理")
         
+        # 添加偏移检验按钮
+        self.offset_test_btn = QPushButton("偏移检验")
+        
         # 添加筛选按钮
         self.filter_btn = QPushButton("行筛选")
         self.reset_filter_btn = QPushButton("重置筛选")
+        
+        # 添加筛选条件管理按钮
+        self.save_filter_conditions_btn = QPushButton("保存筛选条件")
+        self.compare_filter_conditions_btn = QPushButton("对比特定筛选")
         
         # 列显示控制按钮
         self.toggle_columns_btn = QPushButton("查看列")
@@ -131,10 +139,13 @@ class DataViewer(QDialog):
         btn_layout.addWidget(self.normal_btn)  # 添加正态分布按钮到布局
         btn_layout.addWidget(self.states_lookup_btn)
         btn_layout.addWidget(self.uid_analysis_btn)  # 添加UID数据处理按钮到布局
+        btn_layout.addWidget(self.offset_test_btn)   # 添加偏移检验按钮到布局
         btn_layout.addSpacing(20)
         btn_layout.addWidget(self.toggle_columns_btn)
         btn_layout.addWidget(self.filter_btn)
         btn_layout.addWidget(self.reset_filter_btn)
+        btn_layout.addWidget(self.save_filter_conditions_btn)  # 添加保存筛选条件按钮
+        btn_layout.addWidget(self.compare_filter_conditions_btn)  # 添加对比特定筛选按钮
         btn_layout.addSpacing(20)
         btn_layout.addWidget(self.save_btn)
         btn_layout.addStretch()
@@ -180,8 +191,11 @@ class DataViewer(QDialog):
         self.convert_btn.clicked.connect(self.convert_data)  # 连接转换按钮信号
         self.states_lookup_btn.clicked.connect(self.states_lookup)  # 连接状态变量检测按钮信号
         self.uid_analysis_btn.clicked.connect(self.uid_analysis)  # 连接UID数据处理按钮信号
+        self.offset_test_btn.clicked.connect(self.offset_test)    # 连接偏移检验按钮信号
         self.filter_btn.clicked.connect(self.filter_data)  # 连接筛选按钮信号
         self.reset_filter_btn.clicked.connect(self.reset_filter)  # 连接重置筛选按钮信号
+        self.save_filter_conditions_btn.clicked.connect(self.save_filter_conditions)  # 连接保存筛选条件按钮信号
+        self.compare_filter_conditions_btn.clicked.connect(self.compare_filter_conditions)  # 连接对比特定筛选按钮信号
         
         # 表格编辑信号
         self.toggle_columns_btn.clicked.connect(self.toggle_columns)  # 连接列显示控制按钮信号
@@ -847,6 +861,41 @@ class DataViewer(QDialog):
         dialog = UIDDataProcessorDialog(self, self)
         dialog.exec_()
     
+    def offset_test(self):
+        """执行偏移检验 - 使用新的GUI实现"""
+        # 创建并显示新的偏移检测对话框
+        dialog = OffsetTestDialog(self)
+        dialog.exec_()
+
+    def classify_by_state(self, data):
+        """根据第6列（索引为5）的值对数据进行分类"""
+        # 此方法已被新的偏移检测功能替代
+        pass
+
+    def get_viewer_data(self, viewer):
+        """从DataViewer获取数据"""
+        # 此方法已被新的偏移检测功能替代
+        pass
+    
+    def calculate_mae(self, original_data, new_sensor_data):
+        """
+        计算平均绝对误差(MAE)
+        """
+        # 此方法已被新的偏移检测功能替代
+        pass
+
+    def find_best_sensor(self, original_data, all_new_sensors):
+        """
+        找出与原传感器偏移最小的新传感器组
+        """
+        # 此方法已被新的偏移检测功能替代
+        pass
+
+    def save_offset_results_by_state(self, standard_file, compare_files, results):
+        """按状态保存偏移检验结果到log目录"""
+        # 此方法已被新的偏移检测功能替代
+        pass
+
     def filter_data(self):
         """数据筛选功能"""
         # 创建筛选对话框
@@ -943,6 +992,19 @@ class DataViewer(QDialog):
         调用独立的散点图分析模块绘制散点图
         """
         self.scatter_window = plot_scatter(self)
+
+    def save_filter_conditions(self):
+        """保存筛选条件"""
+        dialog = OffsetTestDialog(self, self)
+        # 仅显示对话框，功能由对话框内部实现
+        dialog.exec_()
+    
+    def compare_filter_conditions(self):
+        """对比筛选条件"""
+        dialog = OffsetTestDialog(self, self)
+        # 仅显示对话框，功能由对话框内部实现
+        dialog.exec_()
+
 
 class FilterDialog(QDialog):
     """数据筛选对话框"""
