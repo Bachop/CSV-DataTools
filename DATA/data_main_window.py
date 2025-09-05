@@ -671,35 +671,6 @@ class DataMainWindow(QMainWindow):
                 del self.viewers[file_path]
         self.tab_widget.removeTab(index)
 
-    def open_log_directory(self):
-        """打开Log目录"""
-        # 创建程序根目录下的Log目录路径
-        if getattr(sys, 'frozen', False):
-            # 如果是打包后的exe程序，使用exe所在目录
-            application_path = os.path.dirname(sys.executable)
-        else:
-            # 如果是python脚本运行，使用脚本所在目录
-            application_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        log_dir = os.path.join(application_path, 'Log')
-        
-        # 如果Log目录不存在则创建
-        if not os.path.exists(log_dir):
-            try:
-                os.makedirs(log_dir)
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"无法创建Log目录: {str(e)}")
-                return
-        
-        # 打开Log目录
-        try:
-            if os.name == 'nt':  # Windows
-                os.startfile(log_dir)
-            elif os.name == 'posix':  # macOS/Linux
-                import subprocess
-                subprocess.Popen(['xdg-open', log_dir])
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法打开Log目录: {str(e)}")
-
     def edit_tab_title(self, index):
         """编辑标签页标题"""
         if index < 0:

@@ -23,9 +23,7 @@ from .data_convert import DataConvertDialog
 from .encoding_dialog import EncodingDialog
 from .column_selection_dialog import ColumnSelectionDialog
 from .states_lookup import StatesLookupWindow, StatesColumnSelectionDialog
-from .normal_distribution import plot_normal_distribution  # 导入正态分布函数
 from .scatter_plot import plot_scatter  # 导入散点图函数
-from .offset_test import OffsetTestDialog  # 导入新的偏移检测对话框
 from .batch_plot import BatchPlotDialog  # 导入批量绘制曲线功能
 
 class DataViewer(QDialog):
@@ -95,7 +93,6 @@ class DataViewer(QDialog):
         self.plot_btn = QPushButton("绘制曲线")
         self.batch_plot_btn = QPushButton("批量绘制曲线")  # 添加批量绘制曲线按钮
         self.scatter_btn = QPushButton("绘制散点图")  # 添加散点图按钮
-        self.normal_btn = QPushButton("正态分布")  # 添加正态分布按钮
         
         # 添加数据转换按钮
         self.convert_btn = QPushButton("数据进制转换")
@@ -106,8 +103,6 @@ class DataViewer(QDialog):
         # 添加UID数据处理按钮
         self.uid_analysis_btn = QPushButton("UID数据处理")
         
-        # 添加偏移检验按钮
-        self.offset_test_btn = QPushButton("偏移检验")
         
         # 添加筛选按钮
         self.filter_btn = QPushButton("行筛选")
@@ -139,10 +134,8 @@ class DataViewer(QDialog):
         btn_layout.addWidget(self.plot_btn)
         btn_layout.addWidget(self.batch_plot_btn)  # 添加批量绘制曲线按钮到布局
         btn_layout.addWidget(self.scatter_btn)  # 添加散点图按钮到布局
-        btn_layout.addWidget(self.normal_btn)  # 添加正态分布按钮到布局
         btn_layout.addWidget(self.states_lookup_btn)
         btn_layout.addWidget(self.uid_analysis_btn)  # 添加UID数据处理按钮到布局
-        btn_layout.addWidget(self.offset_test_btn)   # 添加偏移检验按钮到布局
         btn_layout.addSpacing(20)
         btn_layout.addWidget(self.toggle_columns_btn)
         btn_layout.addWidget(self.filter_btn)
@@ -189,12 +182,10 @@ class DataViewer(QDialog):
         self.peak_btn.clicked.connect(self.calculate_peak)
         self.plot_btn.clicked.connect(self.plot_data)
         self.scatter_btn.clicked.connect(self.plot_scatter)  # 连接散点图按钮信号
-        self.normal_btn.clicked.connect(self.plot_normal_distribution)  # 连接正态分布按钮信号
         self.diff_btn.clicked.connect(self.calculate_diff)  # 连接计算差值按钮信号
         self.convert_btn.clicked.connect(self.convert_data)  # 连接转换按钮信号
         self.states_lookup_btn.clicked.connect(self.states_lookup)  # 连接状态变量检测按钮信号
         self.uid_analysis_btn.clicked.connect(self.uid_analysis)  # 连接UID数据处理按钮信号
-        self.offset_test_btn.clicked.connect(self.offset_test)    # 连接偏移检验按钮信号
         self.filter_btn.clicked.connect(self.filter_data)  # 连接筛选按钮信号
         self.reset_filter_btn.clicked.connect(self.reset_filter)  # 连接重置筛选按钮信号
         self.save_filter_conditions_btn.clicked.connect(self.save_filter_conditions)  # 连接保存筛选条件按钮信号
@@ -872,41 +863,6 @@ class DataViewer(QDialog):
         # 创建并显示UID数据处理对话框
         dialog = UIDDataProcessorDialog(self, self)
         dialog.exec_()
-    
-    def offset_test(self):
-        """执行偏移检验 - 使用新的GUI实现"""
-        # 创建并显示新的偏移检测对话框
-        dialog = OffsetTestDialog(self)
-        dialog.exec_()
-
-    def classify_by_state(self, data):
-        """根据第6列（索引为5）的值对数据进行分类"""
-        # 此方法已被新的偏移检测功能替代
-        pass
-
-    def get_viewer_data(self, viewer):
-        """从DataViewer获取数据"""
-        # 此方法已被新的偏移检测功能替代
-        pass
-    
-    def calculate_mae(self, original_data, new_sensor_data):
-        """
-        计算平均绝对误差(MAE)
-        """
-        # 此方法已被新的偏移检测功能替代
-        pass
-
-    def find_best_sensor(self, original_data, all_new_sensors):
-        """
-        找出与原传感器偏移最小的新传感器组
-        """
-        # 此方法已被新的偏移检测功能替代
-        pass
-
-    def save_offset_results_by_state(self, standard_file, compare_files, results):
-        """按状态保存偏移检验结果到log目录"""
-        # 此方法已被新的偏移检测功能替代
-        pass
 
     def filter_data(self):
         """数据筛选功能"""
@@ -992,12 +948,6 @@ class DataViewer(QDialog):
                 data[i, j] = item.text() if item else ""
                 
         return data
-
-    def plot_normal_distribution(self):
-        """
-        调用独立的正态分布分析模块绘制正态分布图
-        """
-        plot_normal_distribution(self, PlotWindow)
 
     def plot_scatter(self):
         """
