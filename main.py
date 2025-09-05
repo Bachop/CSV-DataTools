@@ -17,6 +17,9 @@ matplotlib.use('Qt5Agg')
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
 
+# 导入项目常量
+from SETTINGS import ICON
+
 from CORE import MainWindow
 
 
@@ -25,7 +28,7 @@ def main():
     app = QApplication(sys.argv)
     
     # 设置应用程序图标
-    icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icon', 'CSV-DataTools.ico')
+    icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icon', ICON)
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
     

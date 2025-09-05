@@ -1,14 +1,23 @@
 """
 SETTINGS Package
 
-应用程序配置和设置模块。
+项目配置和常量管理模块。
 
-此目录包含应用程序的各种配置文件，
-如常量定义、配置管理、工具函数和版本信息等。
+此目录包含项目的各种配置信息和常量定义，
+负责管理应用程序的设置、路径工具和常量值。
 """
 
-# 导入主要的设置模块
 from .config import *
 from .consts import *
-from .utlis import *
-from .version import *
+from .paths import *
+
+
+# 定义公共接口
+__all__ = [
+    'config',
+    'consts',
+    'get_application_root',
+    'get_log_directory',
+    'get_pic_directory',
+    'ensure_directory_exists'
+]

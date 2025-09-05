@@ -4,12 +4,14 @@ UID序列号数据分析模块
 用于处理特定格式的数据文件，计算同一序列号下不同状态数据的差值
 """
 
-import csv
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
-                             QLabel, QFileDialog, QMessageBox, QProgressDialog,QDesktopWidget)
-from PyQt5.QtCore import Qt
-import tempfile
+import sys
 import os
+import csv
+from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QPushButton, QLabel, 
+                             QMessageBox, QDesktopWidget)
+
+# 导入路径工具函数
+from SETTINGS import get_log_directory, ensure_directory_exists
 
 
 class UIDDataProcessor:
@@ -204,9 +206,8 @@ class UIDDataProcessorDialog(QDialog):
             processed_data, processed_headers = processor.process_uid_data()
             
             # 创建log文件夹（如果不存在）
-            log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "log")
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
+            log_dir = get_log_directory()
+            ensure_directory_exists(log_dir)
             
             # 生成文件名：原文件名-diff.csv
             if hasattr(self.data_viewer, 'file_path') and self.data_viewer.file_path:

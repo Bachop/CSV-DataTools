@@ -14,6 +14,11 @@ from PyQt5.QtGui import QIcon
 from DATAPROCESS.UI import DataMainWindow
 from SERIALCOM.UI import ComMainWindow
 
+# 导入常量
+from SETTINGS import (
+    APP_NAME, DEFAULT_MAIN_MENU_SIZE, DEFAULT_WINDOW_SIZE, ICON
+    )
+
 
 class MainWindow(QMainWindow):
     """主窗口类"""
@@ -23,19 +28,19 @@ class MainWindow(QMainWindow):
     
     def init_ui(self):
         """初始化UI"""
-        self.setWindowTitle('CSV-DataTools')
-        self.resize(800, 600)
+        self.setWindowTitle(APP_NAME)
+        self.resize(*DEFAULT_MAIN_MENU_SIZE)
         self.center()
         
         # 设置窗口图标
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icon', 'CSV-DataTools.ico')
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icon', ICON)
         if not os.path.exists(icon_path):
             # 如果上面的路径不存在，尝试在当前目录下查找图标
-            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'icon', 'CSV-DataTools.ico')
+            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'icon', ICON)
         if not os.path.exists(icon_path):
             # 如果仍然找不到，尝试在sys._MEIPASS中查找（PyInstaller打包后的路径）
             if hasattr(sys, '_MEIPASS'):
-                icon_path = os.path.join(sys._MEIPASS, 'icon', 'CSV-DataTools.ico')
+                icon_path = os.path.join(sys._MEIPASS, 'icon', ICON)
         
         if os.path.exists(icon_path):
             icon = QIcon(icon_path)
@@ -67,7 +72,7 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(menu_widget)
         
         # 创建标题
-        title_label = QLabel("CSV-DataTools 多功能数据处理工具")
+        title_label = QLabel(APP_NAME + " 多功能数据处理工具")
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("font-size: 24px; font-weight: bold; padding: 20px;")
         main_layout.addWidget(title_label)
@@ -105,19 +110,19 @@ class MainWindow(QMainWindow):
     def show_main_menu(self):
         """显示主菜单"""
         self.stacked_widget.setCurrentIndex(0)
-        self.resize(800, 600)
+        self.resize(*DEFAULT_MAIN_MENU_SIZE)
         self.center()
 
     def show_csv_window(self):
         """显示CSV数据处理窗口"""
         self.stacked_widget.setCurrentIndex(1)
-        self.resize(1600, 900)
+        self.resize(*DEFAULT_WINDOW_SIZE)
         self.center()
 
     def show_com_window(self):
         """显示串口助手窗口"""
         self.stacked_widget.setCurrentIndex(2)
-        self.resize(1600, 900)
+        self.resize(*DEFAULT_WINDOW_SIZE)
         self.center()
     
     def center(self):

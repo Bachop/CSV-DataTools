@@ -4,13 +4,17 @@
 提供保存筛选结果和基于筛选条件对比数据的功能
 """
 
-import csv
-import os
 import sys
-from PyQt5.QtWidgets import (QFileDialog, QMessageBox, QDialog, QVBoxLayout, 
-                             QPushButton, QHBoxLayout, QLabel, QTableWidget,
-                             QTableWidgetItem, QAbstractItemView)
+import os
+import csv
+from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,QFileDialog,
+                             QPushButton, QLabel, QLineEdit, QTextEdit, QTableWidgetItem,
+                             QMessageBox, QGroupBox, QListWidget, QListWidgetItem,
+                             QCheckBox, QComboBox, QApplication,QTableWidget,QAbstractItemView)
 from PyQt5.QtCore import Qt
+
+# 导入路径工具函数
+from SETTINGS import get_log_directory, ensure_directory_exists
 
 
 class FilterComparisonDialog(QDialog):
@@ -107,21 +111,9 @@ class FilterComparisonDialog(QDialog):
         base_name = os.path.splitext(os.path.basename(self.data_viewer.file_path))[0]
         file_name = f"{base_name}-筛选.csv"
         
-        # Log目录路径
-        if getattr(sys, 'frozen', False):
-            # 打包后的exe程序
-            application_path = os.path.dirname(sys.executable)
-        else:
-            # python脚本运行
-            application_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        
-        log_dir = os.path.join(application_path, 'Log')
-        if not os.path.exists(log_dir):
-            try:
-                os.makedirs(log_dir, exist_ok=True)
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"无法创建Log目录: {str(e)}")
-                return
+        # 获取Log目录路径
+        log_dir = get_log_directory()
+        ensure_directory_exists(log_dir)
         
         save_path = os.path.join(log_dir, file_name)
         

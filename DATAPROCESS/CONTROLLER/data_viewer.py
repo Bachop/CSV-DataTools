@@ -8,6 +8,11 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import csv
+import os
+import sys
+import numpy as np
+import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import (QDialog, QFileDialog, QPushButton, QVBoxLayout, QHBoxLayout, 
                              QTableWidget, QTableWidgetItem, QSplitter, QLabel,
                              QAbstractItemView, QComboBox, QTextEdit,
@@ -16,6 +21,11 @@ from PyQt5.QtWidgets import (QDialog, QFileDialog, QPushButton, QVBoxLayout, QHB
                              QSizePolicy, QLineEdit, QScrollArea,QInputDialog)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QCursor
+
+# 导入常量
+from SETTINGS import (
+    DEFAULT_WINDOW_SIZE, DEFAULT_ENCODING
+    )
 
 from DATAPROCESS.FUNCTIONS import (EditableTable,DataConvertDialog,EncodingDialog,
                             ColumnSelectionDialog,StatesLookupWindow,StatesColumnSelectionDialog,
@@ -27,9 +37,9 @@ class DataViewer(QDialog):
     def __init__(self, file_path, parent=None, default_encoding=None):
         super().__init__(parent)
         self.file_path = file_path
-        self.encoding = default_encoding if default_encoding else None
+        self.encoding = default_encoding if default_encoding else DEFAULT_ENCODING
         self.setWindowTitle(f"数据查看 - {os.path.basename(file_path)}")
-        self.resize(1600, 900)
+        self.resize(*DEFAULT_WINDOW_SIZE)
         self.setAcceptDrops(True)  # 启用拖拽
         self.center()
         
@@ -219,7 +229,7 @@ class DataViewer(QDialog):
                 if file_path.lower().endswith('.csv'):
                     # 创建新的DataViewer窗口来打开拖拽的文件
                     try:
-                        viewer = DataViewer(file_path, self.parent(), default_encoding='utf-8')
+                        viewer = DataViewer(file_path, self.parent(), default_encoding=DEFAULT_ENCODING)
                         viewer.file_path = file_path
                         viewer.show()
                     except Exception as e:
@@ -249,11 +259,8 @@ class DataViewer(QDialog):
         
         # Ctrl+S 保存快捷键
         save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
-        save_shortcut.activated.connect(self.trigger_save)
-    
-    def trigger_save(self):
-        """触发保存操作"""
-        self.save_to_file()
+        save_shortcut.activated.connect(self.save_to_file)
+        
     
     def on_content_changed(self):
         """当表格内容被修改时调用"""
@@ -751,7 +758,7 @@ class DataViewer(QDialog):
                 QMessageBox.critical(self, "错误", f"无法用新编码({self.encoding})读取文件")
                 # 恢复原编码
                 self.encoding = old_encoding
-                self.encoding_btn.setText(self.encoding.upper() if self.encoding else "未知编码")
+                self.encoding_btn.setText(self.encoding.upper() if self.encoding else DEFAULT_ENCODING.upper())
                 return
             
             # 更新状态标签

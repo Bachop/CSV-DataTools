@@ -15,6 +15,11 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QWidget)
 from PyQt5.QtCore import Qt
 
+# 导入项目常量
+from SETTINGS import (
+    get_pic_directory, ensure_directory_exists
+)
+
 from DATAPROCESS.UI import PlotWindow
 
 
@@ -447,23 +452,15 @@ class CrossFileBatchPlotDialog(QDialog):
     def get_pic_directory(self):
         """获取pic目录路径"""
         try:
-            # 获取应用程序根目录
-            if getattr(sys, 'frozen', False):
-                # 如果是打包后的exe程序，使用exe所在目录
-                application_path = os.path.dirname(sys.executable)
-            else:
-                # 如果是python脚本运行，使用脚本所在目录
-                application_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            # 获取pic目录路径
+            pic_dir = get_pic_directory()
             
-            # 创建pic目录路径
-            pic_dir = os.path.join(application_path, 'pic')
-            
-            # 如果pic目录不存在则创建
-            os.makedirs(pic_dir, exist_ok=True)
+            # 确保pic目录存在
+            ensure_directory_exists(pic_dir)
             
             return pic_dir
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法创建或访问pic目录: {str(e)}\n当前路径: {application_path}")
+            QMessageBox.critical(self, "错误", f"无法创建或访问pic目录: {str(e)}")
             return None
 
 

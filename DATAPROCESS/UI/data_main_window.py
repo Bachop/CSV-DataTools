@@ -6,15 +6,19 @@ CSV数据处理主窗口模块
 import os
 import sys
 import csv
-import tempfile
+from functools import partial
+
 from PyQt5.QtWidgets import (QInputDialog,QLineEdit,QApplication, QAbstractItemView, QMainWindow, QPushButton, 
                              QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QMessageBox, 
                              QTabWidget, QDesktopWidget, QStatusBar, QMenu, QAction, QTabBar)
 from PyQt5.QtCore import Qt, QRect, QPoint, QMimeData, pyqtSignal
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent, QDragLeaveEvent, QPainter, QDrag, QIcon
 
-# from DATAPROCESS.CONTROLLER import DataViewer
-
+from SETTINGS import (
+                        APP_NAME, DEFAULT_WINDOW_SIZE, CSV_FILE_FILTER, ALL_FILE_FILTER,
+                        DEFAULT_BUTTON_SIZE, ICON,
+                        get_log_directory, get_pic_directory, ensure_directory_exists
+                      ) 
 
 class DraggableTabBar(QTabBar):
     """支持拖拽排序的标签栏"""
@@ -166,19 +170,19 @@ class DataMainWindow(QMainWindow):
     
     def init_ui(self):
         """初始化UI"""
-        self.setWindowTitle('CSV-DataTools - CSV数据处理')
-        self.resize(1600, 900)
+        self.setWindowTitle(APP_NAME)
+        self.resize(*DEFAULT_WINDOW_SIZE)
         self.center()
         
         # 设置窗口图标
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icon', 'CSV-DataTools.ico')
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icon', ICON)
         if not os.path.exists(icon_path):
             # 如果上面的路径不存在，尝试在当前目录下查找图标
-            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'icon', 'CSV-DataTools.ico')
+            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'icon', ICON)
         if not os.path.exists(icon_path):
             # 如果仍然找不到，尝试在sys._MEIPASS中查找（PyInstaller打包后的路径）
             if hasattr(sys, '_MEIPASS'):
-                icon_path = os.path.join(sys._MEIPASS, 'icon', 'CSV-DataTools.ico')
+                icon_path = os.path.join(sys._MEIPASS, 'icon', ICON)
         
         if os.path.exists(icon_path):
             icon = QIcon(icon_path)
@@ -217,13 +221,13 @@ class DataMainWindow(QMainWindow):
         # 添加Log目录按钮
         self.log_dir_btn = QPushButton('Log目录')
         self.log_dir_btn.clicked.connect(self.open_log_directory)
-        self.log_dir_btn.setFixedSize(150, 30)  # 设置Log目录按钮固定大小
+        self.log_dir_btn.setFixedSize(*DEFAULT_BUTTON_SIZE)  # 设置Log目录按钮大小
         button_layout.addWidget(self.log_dir_btn)  # 不添加扩展因子，保持固定宽度
         
         # 添加Pic目录按钮
         self.pic_dir_btn = QPushButton('Pic目录')
         self.pic_dir_btn.clicked.connect(self.open_pic_directory)
-        self.pic_dir_btn.setFixedSize(150, 30)  # 设置Pic目录按钮固定大小
+        self.pic_dir_btn.setFixedSize(*DEFAULT_BUTTON_SIZE)  # 设置Pic目录按钮大小
         button_layout.addWidget(self.pic_dir_btn)  # 不添加扩展因子，保持固定宽度
         
         main_layout.addLayout(button_layout)
@@ -253,7 +257,7 @@ class DataMainWindow(QMainWindow):
         """窗口显示事件"""
         super().showEvent(event)
         # 请求主窗口调整大小
-        self.request_resize.emit(1600, 900)
+        self.request_resize.emit(*DEFAULT_WINDOW_SIZE)
     
     def back_to_main(self):
         """返回主菜单"""
@@ -486,18 +490,9 @@ class DataMainWindow(QMainWindow):
         if not file_name.endswith('.csv'):
             file_name += '.csv'
         
-        # 创建程序根目录下的Log目录路径
-        # 修改Log目录位置为与可执行文件同级目录
-        if getattr(sys, 'frozen', False):
-            # 如果是打包后的exe程序，使用exe所在目录
-            application_path = os.path.dirname(sys.executable)
-        else:
-            # 如果是python脚本运行，使用脚本所在目录
-            application_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        log_dir = os.path.join(application_path, 'Log')
-        # 如果Log目录不存在则创建
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+        # 获取Log目录路径并创建文件
+        log_dir = get_log_directory()
+        ensure_directory_exists(log_dir)
         temp_file_path = os.path.join(log_dir, file_name)
         
         # 检查临时文件是否已存在，如果存在则添加序号
@@ -514,8 +509,9 @@ class DataMainWindow(QMainWindow):
             writer.writerow(["1"])
             writer.writerow([""])
         
+        # 动态导入DataViewer
         from DATAPROCESS.CONTROLLER import DataViewer
-
+                    
         # 创建DataViewer实例
         viewer = DataViewer(temp_file_path, self, default_encoding='utf-8')
         viewer.file_path = temp_file_path
@@ -524,12 +520,11 @@ class DataMainWindow(QMainWindow):
         viewer.tab_title = file_name  # 初始化标签页标题
         
         # 添加标签页
-        tab_title = file_name  # 使用用户输入的文件名作为初始标签页标题
-        tab_index = self.tab_widget.addTab(viewer, tab_title)
+        tab_index = self.tab_widget.addTab(viewer, file_name)
         self.tab_widget.setCurrentIndex(tab_index)
         self.viewers[temp_file_path] = viewer
-        self.status_bar.showMessage(f'已创建新文件 @Silver')
-    
+        self.status_bar.showMessage(f'已创建新文件: {file_name} @Silver')
+
     def close_current_tab(self):
         """关闭当前标签页"""
         current_index = self.tab_widget.currentIndex()
@@ -592,29 +587,17 @@ class DataMainWindow(QMainWindow):
         """打开CSV文件"""
         # 使用getOpenFileNames支持多文件选择
         file_paths, _ = QFileDialog.getOpenFileNames(
-            self, '选择CSV文件', '', 'CSV文件 (*.csv);;所有文件 (*)')
+            self, '选择CSV文件', '', f'{CSV_FILE_FILTER};;{ALL_FILE_FILTER}')  # 使用常量设置文件过滤器
         
         if file_paths:
             self.open_files(file_paths)
     
     def open_log_directory(self):
         """打开Log目录"""
-        # 创建程序根目录下的Log目录路径
-        # 修改Log目录位置为与可执行文件同级目录
-        if getattr(sys, 'frozen', False):
-            # 如果是打包后的exe程序，使用exe所在目录
-            application_path = os.path.dirname(sys.executable)
-        else:
-            # 如果是python脚本运行，使用脚本所在目录
-            application_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        log_dir = os.path.join(application_path, 'Log')
-        # 如果Log目录不存在则创建（仅在第一次检查时创建）
-        if not os.path.exists(log_dir):
-            try:
-                os.makedirs(log_dir, exist_ok=True)
-            except OSError:
-                # 目录可能在检查后被其他进程创建，忽略错误
-                pass
+        # 获取Log目录路径
+        log_dir = get_log_directory()
+        # 确保Log目录存在
+        ensure_directory_exists(log_dir)
         
         # 在资源管理器中打开Log目录
         try:
@@ -630,22 +613,10 @@ class DataMainWindow(QMainWindow):
 
     def open_pic_directory(self):
         """打开Pic目录"""
-        # 创建程序根目录下的Pic目录路径
-        # 修改Pic目录位置为与可执行文件同级目录
-        if getattr(sys, 'frozen', False):
-            # 如果是打包后的exe程序，使用exe所在目录
-            application_path = os.path.dirname(sys.executable)
-        else:
-            # 如果是python脚本运行，使用脚本所在目录
-            application_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        pic_dir = os.path.join(application_path, 'Pic')
-        # 如果Pic目录不存在则创建（仅在第一次检查时创建）
-        if not os.path.exists(pic_dir):
-            try:
-                os.makedirs(pic_dir, exist_ok=True)
-            except OSError:
-                # 目录可能在检查后被其他进程创建，忽略错误
-                pass
+        # 获取Pic目录路径
+        pic_dir = get_pic_directory()
+        # 确保Pic目录存在
+        ensure_directory_exists(pic_dir)
         
         # 在资源管理器中打开Pic目录
         try:

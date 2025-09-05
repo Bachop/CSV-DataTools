@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import QMessageBox
 from DATAPROCESS.UI import ScatterPlotWindow
 
-
 def plot_scatter(data_viewer):
     """
     根据选中数据绘制散点图

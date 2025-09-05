@@ -18,13 +18,16 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
+from SETTINGS import (DEFAULT_WINDOW_SIZE, DEFAULT_DPI,
+                      get_pic_directory, ensure_directory_exists
+                      )
 
 class PlotWindow(QDialog):
     """用于显示曲线的窗口，实现基本的曲线显示和交互功能"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("数据曲线分析")
-        self.resize(1600, 900)
+        self.resize(*DEFAULT_WINDOW_SIZE)
         self.setWindowFlags(Qt.Window | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint)
         self.center()
         
@@ -317,20 +320,11 @@ class PlotWindow(QDialog):
     def setup_default_save_directory(self):
         """设置默认保存图片的目录为pic"""
         try:
-            # 获取应用程序根目录
-            if getattr(sys, 'frozen', False):
-                # 如果是打包后的exe程序，使用exe所在目录
-                application_path = os.path.dirname(sys.executable)
-            else:
-                # 如果是python脚本运行，使用脚本所在目录
-                application_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            # 获取pic目录路径
+            pic_dir = get_pic_directory()
             
-            # 创建pic目录路径
-            pic_dir = os.path.join(application_path, 'pic')
-            
-            # 如果pic目录不存在则创建
-            if not os.path.exists(pic_dir):
-                os.makedirs(pic_dir)
+            # 确保pic目录存在
+            ensure_directory_exists(pic_dir)
             
             # 设置matplotlib的默认保存目录
             mpl.rcParams['savefig.directory'] = pic_dir
@@ -383,7 +377,7 @@ class PlotWindow(QDialog):
                     
                     # 如果用户选择了文件路径，则保存图像
                     if file_path:
-                        self.figure1.savefig(file_path, dpi=300, bbox_inches='tight')
+                        self.figure1.savefig(file_path, dpi=DEFAULT_DPI, bbox_inches='tight')
                 finally:
                     # 恢复原来的目录
                     os.chdir(old_dir)
