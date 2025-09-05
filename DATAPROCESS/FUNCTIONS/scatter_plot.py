@@ -7,7 +7,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import QMessageBox
-from .scatter_plot_window import ScatterPlotWindow
+from DATAPROCESS.UI import ScatterPlotWindow
 
 
 def plot_scatter(data_viewer):

@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (QInputDialog,QLineEdit,QApplication, QAbstractItemV
 from PyQt5.QtCore import Qt, QRect, QPoint, QMimeData, pyqtSignal
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent, QDragLeaveEvent, QPainter, QDrag, QIcon
 
-from .data_viewer import DataViewer
+# from DATAPROCESS.CONTROLLER import DataViewer
 
 
 class DraggableTabBar(QTabBar):
@@ -514,6 +514,8 @@ class DataMainWindow(QMainWindow):
             writer.writerow(["1"])
             writer.writerow([""])
         
+        from DATAPROCESS.CONTROLLER import DataViewer
+
         # 创建DataViewer实例
         viewer = DataViewer(temp_file_path, self, default_encoding='utf-8')
         viewer.file_path = temp_file_path
@@ -571,6 +573,9 @@ class DataMainWindow(QMainWindow):
             
             # 打开新的数据查看窗口作为标签页
             try:
+
+                from DATAPROCESS.CONTROLLER import DataViewer
+
                 # 创建DataViewer实例，传入默认编码utf-8
                 viewer = DataViewer(file_path, self, default_encoding='utf-8')
                 # 为viewer添加file_path属性，以便在关闭标签页时使用

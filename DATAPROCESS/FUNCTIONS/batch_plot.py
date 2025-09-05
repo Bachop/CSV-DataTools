@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QWidget)
 from PyQt5.QtCore import Qt
 
-from .plot_window import PlotWindow
+from DATAPROCESS.UI import PlotWindow
 
 
 class FilterDialog(QDialog):

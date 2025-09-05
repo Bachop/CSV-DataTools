@@ -17,14 +17,10 @@ from PyQt5.QtWidgets import (QDialog, QFileDialog, QPushButton, QVBoxLayout, QHB
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QCursor
 
-from .editable_table import EditableTable
-from .plot_window import PlotWindow
-from .data_convert import DataConvertDialog
-from .encoding_dialog import EncodingDialog
-from .column_selection_dialog import ColumnSelectionDialog
-from .states_lookup import StatesLookupWindow, StatesColumnSelectionDialog
-from .scatter_plot import plot_scatter  # 导入散点图函数
-from .batch_plot import BatchPlotDialog  # 导入批量绘制曲线功能
+from DATAPROCESS.FUNCTIONS import (EditableTable,DataConvertDialog,EncodingDialog,
+                            ColumnSelectionDialog,StatesLookupWindow,StatesColumnSelectionDialog,
+                            BatchPlotDialog,plot_scatter)
+from DATAPROCESS.UI import PlotWindow
 
 class DataViewer(QDialog):
     """数据查看窗口，显示CSV内容并提供数据处理功能"""
@@ -858,7 +854,7 @@ class DataViewer(QDialog):
     def uid_analysis(self):
         """执行UID数据分析"""
         # 导入UID数据处理器对话框
-        from .uid_data_processor import UIDDataProcessorDialog
+        from DATAPROCESS.FUNCTIONS import UIDDataProcessorDialog
         
         # 创建并显示UID数据处理对话框
         dialog = UIDDataProcessorDialog(self, self)
@@ -958,7 +954,7 @@ class DataViewer(QDialog):
     def save_filter_conditions(self):
         """保存筛选条件"""
         # 导入筛选条件管理对话框
-        from .filter_comparison import FilterComparisonDialog
+        from DATAPROCESS.FUNCTIONS import FilterComparisonDialog
         
         # 创建并显示筛选条件管理对话框
         dialog = FilterComparisonDialog(self, self)
@@ -968,7 +964,7 @@ class DataViewer(QDialog):
     def compare_filter_conditions(self):
         """对比筛选条件"""
         # 导入筛选条件管理对话框
-        from .filter_comparison import FilterComparisonDialog
+        from DATAPROCESS.FUNCTIONS import FilterComparisonDialog
         
         # 创建并显示筛选条件管理对话框
         dialog = FilterComparisonDialog(self, self)

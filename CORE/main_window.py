@@ -11,8 +11,8 @@ from PyQt5.QtWidgets import (QLabel,QApplication, QMainWindow, QPushButton,
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 
-from DATA.data_main_window import DataMainWindow
-from COM.com_main_window import ComMainWindow
+from DATAPROCESS.UI import DataMainWindow
+from SERIALCOM.UI import ComMainWindow
 
 
 class MainWindow(QMainWindow):

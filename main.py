@@ -17,7 +17,7 @@ matplotlib.use('Qt5Agg')
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
 
-from main_window import MainWindow
+from CORE import MainWindow
 
 
 def main():
