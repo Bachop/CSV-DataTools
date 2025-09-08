@@ -909,7 +909,9 @@ class DataViewer(QDialog):
         """重置筛选，显示所有行"""
         for row in range(self.table.rowCount()):
             self.table.setRowHidden(row, False)
-        QMessageBox.information(self, "重置筛选", "已显示所有行数据")
+        # 清除筛选条件
+        from DATAPROCESS.FUNCTIONS.filter_comparison import FilterDialog
+        FilterDialog.global_filters = {}
 
     def get_selected_columns(self):
         """获取当前选中的列索引"""

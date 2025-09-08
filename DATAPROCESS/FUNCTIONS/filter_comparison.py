@@ -20,10 +20,13 @@ from SETTINGS import get_log_directory, ensure_directory_exists
 
 class FilterDialog(QDialog):
     """数据筛选对话框"""
+    # 类变量，用于存储全局筛选条件
+    global_filters = {}
+    
     def __init__(self, table, parent=None):
         super().__init__(parent)
         self.table = table
-        self.filters = {}  # 存储每列的筛选条件
+        self.filters = FilterDialog.global_filters  # 使用类变量存储的筛选条件
         self.init_ui()
     
     def init_ui(self):
@@ -92,6 +95,12 @@ class FilterDialog(QDialog):
         """清空所有筛选条件"""
         for line_edit in self.filter_inputs.values():
             line_edit.clear()
+    
+    def accept(self):
+        """确定按钮点击事件，保存筛选条件"""
+        # 更新全局筛选条件
+        FilterDialog.global_filters = self.get_filters()
+        super().accept()
 
 
 class FilterComparisonDialog(QDialog):
