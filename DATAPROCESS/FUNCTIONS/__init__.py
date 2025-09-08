@@ -12,7 +12,7 @@ from .column_selection_dialog import ColumnSelectionDialog
 from .data_convert import DataConvertDialog
 from .editable_table import EditableTable
 from .encoding_dialog import EncodingDialog
-from .filter_comparison import FilterComparisonDialog
+from .filter_comparison import FilterDialog,FilterComparisonDialog
 from .scatter_plot import plot_scatter
 from .states_lookup import StatesLookupWindow,StatesColumnSelectionDialog
 from .uid_data_processor import UIDDataProcessorDialog
@@ -25,7 +25,7 @@ __all__ = [
     'DataConvertDialog',
     'EditableTable',
     'EncodingDialog',
-    'FilterComparisonDialog',
+    'FilterDialog','FilterComparisonDialog',
     'plot_scatter',
     'StatesLookupWindow','StatesColumnSelectionDialog',
     'UIDDataProcessorDialog'

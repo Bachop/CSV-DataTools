@@ -10,11 +10,88 @@ import csv
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,QFileDialog,
                              QPushButton, QLabel, QLineEdit, QTextEdit, QTableWidgetItem,
                              QMessageBox, QGroupBox, QListWidget, QListWidgetItem,
-                             QCheckBox, QComboBox, QApplication,QTableWidget,QAbstractItemView)
+                             QCheckBox, QComboBox, QApplication,QTableWidget,QAbstractItemView,
+                             QScrollArea, QWidget)
 from PyQt5.QtCore import Qt
 
 # 导入路径工具函数
 from SETTINGS import get_log_directory, ensure_directory_exists
+
+
+class FilterDialog(QDialog):
+    """数据筛选对话框"""
+    def __init__(self, table, parent=None):
+        super().__init__(parent)
+        self.table = table
+        self.filters = {}  # 存储每列的筛选条件
+        self.init_ui()
+    
+    def init_ui(self):
+        """初始化界面"""
+        self.setWindowTitle("数据筛选")
+        self.resize(300, 600)
+        
+        layout = QVBoxLayout()
+        
+        # 创建滚动区域以容纳所有列的筛选输入框
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+        
+        # 为每列创建筛选输入框
+        self.filter_inputs = {}
+        for col in range(self.table.columnCount()):
+            header_item = self.table.horizontalHeaderItem(col)
+            header_text = header_item.text() if header_item else f"列{col+1}"
+            
+            # 创建水平布局放置列名和输入框
+            h_layout = QHBoxLayout()
+            h_layout.addWidget(QLabel(f"{header_text}:"))
+            
+            # 创建输入框并设置默认值（如果已有筛选条件）
+            line_edit = QLineEdit()
+            if col in self.filters:
+                line_edit.setText(self.filters[col])
+            self.filter_inputs[col] = line_edit
+            h_layout.addWidget(line_edit)
+            
+            scroll_layout.addLayout(h_layout)
+        
+        scroll_widget.setLayout(scroll_layout)
+        scroll_area.setWidget(scroll_widget)
+        scroll_area.setWidgetResizable(True)
+        layout.addWidget(scroll_area)
+        
+        # 添加按钮
+        button_layout = QHBoxLayout()
+        self.ok_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+        self.clear_button = QPushButton("清空")
+        
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        self.clear_button.clicked.connect(self.clear_filters)
+        
+        button_layout.addWidget(self.ok_button)
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.clear_button)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def get_filters(self):
+        """获取筛选条件"""
+        filters = {}
+        for col, line_edit in self.filter_inputs.items():
+            text = line_edit.text().strip()
+            if text:  # 只返回非空的筛选条件
+                filters[col] = text
+        return filters
+    
+    def clear_filters(self):
+        """清空所有筛选条件"""
+        for line_edit in self.filter_inputs.values():
+            line_edit.clear()
 
 
 class FilterComparisonDialog(QDialog):
@@ -114,7 +191,6 @@ class FilterComparisonDialog(QDialog):
         # 获取Log目录路径
         log_dir = get_log_directory()
         ensure_directory_exists(log_dir)
-        
         save_path = os.path.join(log_dir, file_name)
         
         # 保存为CSV文件
