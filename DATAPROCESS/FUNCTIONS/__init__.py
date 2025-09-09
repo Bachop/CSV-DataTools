@@ -15,18 +15,21 @@ from .encoding_dialog import EncodingDialog
 from .filter_comparison import FilterDialog,FilterComparisonDialog
 from .scatter_plot import plot_scatter
 from .states_lookup import StatesLookupWindow,StatesColumnSelectionDialog
-from .uid_data_processor import UIDDataProcessorDialog
+from .steady_state_diff import SteadyStateDiffDialog
+from .uid_data_processor import UIDDataProcessor
+
 
 # 定义公共接口
 # 由于模块较多，建议按需导入具体模块而不是全部导入
 __all__ = [
     'BatchPlotDialog',
-    'ColumnSelectionDialog', 
+    'ColumnSelectionDialog',
     'DataConvertDialog',
     'EditableTable',
     'EncodingDialog',
     'FilterDialog','FilterComparisonDialog',
     'plot_scatter',
     'StatesLookupWindow','StatesColumnSelectionDialog',
-    'UIDDataProcessorDialog'
+    'SteadyStateDiffDialog',
+    'UIDDataProcessor',
 ]

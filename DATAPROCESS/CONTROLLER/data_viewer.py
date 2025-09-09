@@ -30,7 +30,7 @@ from SETTINGS import (
 from DATAPROCESS.FUNCTIONS import (EditableTable,DataConvertDialog,EncodingDialog,
                             ColumnSelectionDialog,StatesLookupWindow,FilterDialog,
                             StatesColumnSelectionDialog,
-                            BatchPlotDialog,plot_scatter)
+                            BatchPlotDialog,plot_scatter, SteadyStateDiffDialog)
 from DATAPROCESS.UI import PlotWindow
 
 class DataViewer(QDialog):
@@ -110,6 +110,8 @@ class DataViewer(QDialog):
         # 添加UID数据处理按钮
         self.uid_analysis_btn = QPushButton("UID数据处理")
         
+        # 添加稳态差值计算按钮
+        self.steady_state_diff_btn = QPushButton("稳态差值计算")
         
         # 添加筛选按钮
         self.filter_btn = QPushButton("行筛选")
@@ -143,6 +145,8 @@ class DataViewer(QDialog):
         btn_layout.addWidget(self.scatter_btn)  # 添加散点图按钮到布局
         btn_layout.addWidget(self.states_lookup_btn)
         btn_layout.addWidget(self.uid_analysis_btn)  # 添加UID数据处理按钮到布局
+        btn_layout.addSpacing(20)
+        btn_layout.addWidget(self.steady_state_diff_btn)  # 添加稳态差值计算按钮
         btn_layout.addSpacing(20)
         btn_layout.addWidget(self.toggle_columns_btn)
         btn_layout.addWidget(self.filter_btn)
@@ -201,9 +205,25 @@ class DataViewer(QDialog):
         # 连接批量绘制曲线按钮信号
         self.batch_plot_btn.clicked.connect(self.batch_plot_data)
         
+        # 连接稳态差值计算按钮信号
+        self.steady_state_diff_btn.clicked.connect(self.calculate_steady_state_diff)
+        
         # 表格编辑信号
         self.toggle_columns_btn.clicked.connect(self.toggle_columns)  # 连接列显示控制按钮信号
         self.save_btn.clicked.connect(self.save_to_file)
+    
+    def calculate_steady_state_diff(self):
+        """计算稳态差值"""
+        # 获取当前所有列名
+        column_names = []
+        for col in range(self.table.columnCount()):
+            header_item = self.table.horizontalHeaderItem(col)
+            column_names.append(header_item.text() if header_item else f"列{col+1}")
+        
+        # 创建稳态差值计算对话框
+        dialog = SteadyStateDiffDialog(self.table, column_names, self)
+        dialog.file_name = os.path.basename(self.file_path)  # 传递文件名用于生成结果文件名
+        dialog.exec_()
     
     def batch_plot_data(self):
         """批量绘制选中列的曲线"""

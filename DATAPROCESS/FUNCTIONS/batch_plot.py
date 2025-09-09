@@ -622,7 +622,7 @@ class BatchPlotDialog(QDialog):
         file_name = os.path.splitext(os.path.basename(self.data_viewer.file_path))[0]
 
         # 获取pic目录路径
-        pic_dir = self.get_pic_directory()
+        pic_dir = get_pic_directory()
         if not pic_dir:
             return
 
@@ -724,26 +724,3 @@ class BatchPlotDialog(QDialog):
         
         progress.setValue(len(self.selected_columns))
         QMessageBox.information(self, "完成", f"批量绘制完成，图片已保存到: {pic_dir}")
-    
-    def get_pic_directory(self):
-        """获取pic目录路径"""
-        try:
-            # 获取应用程序根目录
-            if getattr(sys, 'frozen', False):
-                # 如果是打包后的exe程序，使用exe所在目录
-                application_path = os.path.dirname(sys.executable)
-            else:
-                # 如果是python脚本运行，使用脚本所在目录
-                application_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            
-            # 创建pic目录路径
-            pic_dir = os.path.join(application_path, 'pic')
-            
-            # 如果pic目录不存在则创建
-            if not os.path.exists(pic_dir):
-                os.makedirs(pic_dir)
-            
-            return pic_dir
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法创建或访问pic目录: {str(e)}")
-            return None
