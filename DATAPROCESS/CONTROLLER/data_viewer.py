@@ -295,35 +295,6 @@ class DataViewer(QDialog):
                     # 更新标签页标题，使用独立的标签页标题而不是基于文件名
                     if not hasattr(self, 'tab_title'):
                         self.tab_title = os.path.basename(self.file_path)
-                    
-                    if self.modified:
-                        main_window.tab_widget.setTabText(i, f"{self.tab_title}*")
-                    else:
-                        main_window.tab_widget.setTabText(i, self.tab_title)
-                    break
-    
-    def reset_modified_flag(self):
-        """重置修改标记"""
-        self.modified = False
-        self.update_tab_title()
-        self.update_status_label()
-        
-    def select_encoding(self):
-        """强制用户选择编码"""
-        dialog = EncodingDialog(self.file_path, self)
-        
-        if dialog.exec_() == QDialog.Accepted:
-            self.encoding = dialog.get_selected_encoding()
-            return True
-        else:
-            # 用户点击了取消
-            reply = QMessageBox.question(self, "确认", 
-                                       "未选择编码，是否关闭文件查看窗口？",
-                                       QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-            if reply == QMessageBox.Yes:
-                return False
-            # 否则继续要求选择编码
-            return self.select_encoding()
 
     def load_csv(self, file_path):
         """使用用户选择的编码加载CSV文件到表格"""
@@ -433,7 +404,6 @@ class DataViewer(QDialog):
                     self.is_new_file = False
                     self.setWindowTitle(f"数据查看 - {os.path.basename(file_path)}")
                     # 重置修改标记
-                    self.reset_modified_flag()
                     
                     # 获取主窗口引用以更新viewers字典
                     # 通过遍历parent链直到找到具有status_bar和viewers属性的对象
@@ -487,9 +457,6 @@ class DataViewer(QDialog):
                 with open(self.file_path, 'w', newline='', encoding=self.encoding) as f:
                     writer = csv.writer(f)
                     writer.writerows(data)
-                
-                # 重置修改标记
-                self.reset_modified_flag()
                 
                 # 获取主窗口引用以更新状态栏
                 # 通过遍历parent链直到找到具有status_bar和viewers属性的对象
@@ -764,7 +731,6 @@ class DataViewer(QDialog):
             
             # 更新状态标签
             self.update_status_label()
-            QMessageBox.information(self, "成功", f"编码已更改为: {self.encoding}")
 
     def toggle_columns(self):
         """切换列显示模式"""
