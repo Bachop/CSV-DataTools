@@ -132,27 +132,26 @@ class DataViewer(QDialog):
         self.encoding_btn = QPushButton(self.encoding.upper() if self.encoding else "未知编码")
         self.encoding_btn.clicked.connect(self.change_encoding)
         
-        btn_layout.addWidget(self.encoding_btn)
+        btn_layout.addWidget(self.encoding_btn) # 添加编码按钮 
         btn_layout.addSpacing(20)
-        btn_layout.addWidget(self.mean_btn)
-        btn_layout.addWidget(self.peak_btn)
-        btn_layout.addWidget(self.diff_btn)
-        btn_layout.addSpacing(20)
-        btn_layout.addWidget(self.convert_btn)
-        btn_layout.addSpacing(20)
-        btn_layout.addWidget(self.plot_btn)
-        btn_layout.addWidget(self.batch_plot_btn)  # 添加批量绘制曲线按钮到布局
-        btn_layout.addWidget(self.scatter_btn)  # 添加散点图按钮到布局
-        btn_layout.addWidget(self.states_lookup_btn)
-        btn_layout.addWidget(self.uid_analysis_btn)  # 添加UID数据处理按钮到布局
-        btn_layout.addSpacing(20)
+        btn_layout.addWidget(self.mean_btn) # 添加计算均值按钮 
+        btn_layout.addWidget(self.peak_btn) # 添加计算峰峰值按钮 
+        btn_layout.addWidget(self.diff_btn) # 添加计算差值按钮 
         btn_layout.addWidget(self.steady_state_diff_btn)  # 添加稳态差值计算按钮
         btn_layout.addSpacing(20)
-        btn_layout.addWidget(self.toggle_columns_btn)
-        btn_layout.addWidget(self.filter_btn)
-        btn_layout.addWidget(self.reset_filter_btn)
-        btn_layout.addWidget(self.save_filter_conditions_btn)  # 添加保存筛选条件按钮
-        btn_layout.addWidget(self.compare_filter_conditions_btn)  # 添加对比特定筛选按钮
+        btn_layout.addWidget(self.convert_btn) # 添加数据转换按钮 
+        btn_layout.addSpacing(20)
+        btn_layout.addWidget(self.plot_btn) # 添加绘制曲线按钮 
+        btn_layout.addWidget(self.batch_plot_btn)  # 添加批量绘制曲线按钮 
+        btn_layout.addWidget(self.scatter_btn)  # 添加散点图按钮 
+        btn_layout.addWidget(self.states_lookup_btn) # 添加状态变量检测按钮 
+        btn_layout.addWidget(self.uid_analysis_btn)  # 添加UID数据处理按钮 
+        btn_layout.addSpacing(20)
+        btn_layout.addWidget(self.toggle_columns_btn)  # 添加列显示控制按钮 
+        btn_layout.addWidget(self.filter_btn)  # 添加筛选按钮 
+        btn_layout.addWidget(self.reset_filter_btn)  # 添加重置筛选按钮 
+        btn_layout.addWidget(self.save_filter_conditions_btn)  # 添加保存筛选条件按钮 
+        btn_layout.addWidget(self.compare_filter_conditions_btn)  # 添加对比特定筛选按钮 
         btn_layout.addSpacing(20)
         btn_layout.addWidget(self.save_btn)
         btn_layout.addStretch()
