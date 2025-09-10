@@ -46,7 +46,7 @@ class SteadyStateDiffDialog(QDialog):
         # 稳态0点数输入
         layout.addWidget(QLabel("稳态0点数（从第1行向下计数）:"))
         self.steady0_count_edit = QLineEdit()
-        self.steady0_count_edit.setText("10")  # 默认值
+        self.steady0_count_edit.setText("20")  # 默认取20个点
         layout.addWidget(self.steady0_count_edit)
         
         # 稳态1点数输入
