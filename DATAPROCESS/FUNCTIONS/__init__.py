@@ -16,7 +16,7 @@ from .filter_comparison import FilterDialog,FilterComparisonDialog
 from .scatter_plot import plot_scatter
 from .states_lookup import StatesLookupWindow,StatesColumnSelectionDialog
 from .steady_state_diff import SteadyStateDiffDialog
-from .uid_data_processor import UIDDataProcessor
+from .uid_data_processor import UIDDataProcessorDialog
 
 
 # 定义公共接口
@@ -31,5 +31,5 @@ __all__ = [
     'plot_scatter',
     'StatesLookupWindow','StatesColumnSelectionDialog',
     'SteadyStateDiffDialog',
-    'UIDDataProcessor',
+    'UIDDataProcessorDialog',
 ]
