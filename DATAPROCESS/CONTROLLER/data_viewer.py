@@ -866,7 +866,7 @@ class DataViewer(QDialog):
                 self.table.setRowHidden(row, False)
             return
         
-        # 遍历所有行，检查是否满足筛选条件
+        # 遍历所有行，检查是否满足筛选条件 
         for row in range(self.table.rowCount()):
             hide_row = False
             

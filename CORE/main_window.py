@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
         button_layout = QGridLayout()
         
         # CSV数据处理按钮
-        self.csv_button = QPushButton('CSV数据处理')
+        self.csv_button = QPushButton('数据处理')
         self.csv_button.setMinimumSize(200, 100)
         self.csv_button.clicked.connect(self.show_csv_window)
         button_layout.addWidget(self.csv_button, 0, 0, Qt.AlignCenter)
