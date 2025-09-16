@@ -22,7 +22,6 @@ from PyQt5.QtWidgets import (QDialog, QFileDialog, QPushButton, QVBoxLayout, QHB
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QCursor
 
-# 导入常量
 from SETTINGS import (
     DEFAULT_WINDOW_SIZE, DEFAULT_ENCODING
     )
@@ -153,7 +152,7 @@ class DataViewer(QDialog):
         btn_layout.addWidget(self.save_filter_conditions_btn)  # 添加保存筛选条件按钮 
         btn_layout.addWidget(self.compare_filter_conditions_btn)  # 添加对比特定筛选按钮 
         btn_layout.addSpacing(20)
-        btn_layout.addWidget(self.save_btn)
+        btn_layout.addWidget(self.save_btn)  # 添加保存修改按钮 
         btn_layout.addStretch()
         
         # 右侧按钮区域
@@ -188,9 +187,9 @@ class DataViewer(QDialog):
         self.setLayout(main_layout)
         
         # 连接信号
-        self.mean_btn.clicked.connect(self.calculate_mean)
-        self.peak_btn.clicked.connect(self.calculate_peak)
-        self.plot_btn.clicked.connect(self.plot_data)
+        self.mean_btn.clicked.connect(self.calculate_mean)  # 连接计算均值按钮信号
+        self.peak_btn.clicked.connect(self.calculate_peak)  # 连接计算峰峰值按钮信号
+        self.plot_btn.clicked.connect(self.plot_data)  # 连接绘制曲线按钮信号
         self.scatter_btn.clicked.connect(self.plot_scatter)  # 连接散点图按钮信号
         self.diff_btn.clicked.connect(self.calculate_diff)  # 连接计算差值按钮信号
         self.convert_btn.clicked.connect(self.convert_data)  # 连接转换按钮信号
@@ -200,16 +199,10 @@ class DataViewer(QDialog):
         self.reset_filter_btn.clicked.connect(self.reset_filter)  # 连接重置筛选按钮信号
         self.save_filter_conditions_btn.clicked.connect(self.save_filter_conditions)  # 连接保存筛选条件按钮信号
         self.compare_filter_conditions_btn.clicked.connect(self.compare_filter_conditions)  # 连接对比特定筛选按钮信号
-        
-        # 连接批量绘制曲线按钮信号
-        self.batch_plot_btn.clicked.connect(self.batch_plot_data)
-        
-        # 连接稳态差值计算按钮信号
-        self.steady_state_diff_btn.clicked.connect(self.calculate_steady_state_diff)
-        
-        # 表格编辑信号
+        self.batch_plot_btn.clicked.connect(self.batch_plot_data)  # 连接批量绘制曲线按钮信号
+        self.steady_state_diff_btn.clicked.connect(self.calculate_steady_state_diff)  # 连接稳态差值计算按钮信号
         self.toggle_columns_btn.clicked.connect(self.toggle_columns)  # 连接列显示控制按钮信号
-        self.save_btn.clicked.connect(self.save_to_file)
+        self.save_btn.clicked.connect(self.save_to_file)  # 连接保存按钮信号
     
     def calculate_steady_state_diff(self):
         """计算稳态差值"""
@@ -494,6 +487,7 @@ class DataViewer(QDialog):
                 self.update_status_label()
             except Exception as e:
                 QMessageBox.critical(self, "保存失败", f"保存文件时出错: {str(e)}")
+                
     def get_selected_data(self):
         """获取选中的数值数据，考虑行号作为X轴"""
         selected_ranges = self.table.selectedRanges()

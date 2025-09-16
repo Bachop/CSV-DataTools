@@ -10,6 +10,7 @@ SETTINGS Package
 from .config import *
 from .consts import *
 from .paths import *
+from .utils import *
 
 
 # 定义公共接口
@@ -19,5 +20,8 @@ __all__ = [
     'get_application_root',
     'get_log_directory',
     'get_pic_directory',
-    'ensure_directory_exists'
+    'ensure_directory_exists',
+    'get_save_filename',
+    'get_open_filename',
+    'get_open_filenames'
 ]
