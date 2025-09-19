@@ -33,19 +33,20 @@ class DataConvertDialog(QDialog):
         # 转换模式选择
         layout.addWidget(QLabel("转换模式:"))
         self.convert_mode = QComboBox()
-        self.convert_mode.addItems(["CAN模式", "普通模式"])
+        self.convert_mode.addItems(["普通模式", "CAN模式"])
         layout.addWidget(self.convert_mode)
         
         # 源进制和目标进制
         layout.addWidget(QLabel("源进制:"))
         self.source_base = QComboBox()
-        self.source_base.addItems(["2进制", "4进制", "8进制", "16进制"])
+        self.source_base.addItems(["2进制", "4进制", "8进制", "10进制", "16进制"])
         self.source_base.setCurrentText("16进制")  # 设置默认选中16进制
         layout.addWidget(self.source_base)
         
         layout.addWidget(QLabel("目标进制:"))
         self.target_base = QComboBox()
-        self.target_base.addItems(["10进制"])
+        self.target_base.addItems(["2进制", "4进制", "8进制", "10进制", "16进制"])
+        self.target_base.setCurrentText("10进制")  # 默认转换为10进制
         layout.addWidget(self.target_base)
         
         # 按钮
@@ -67,14 +68,9 @@ class DataConvertDialog(QDialog):
             mode = self.convert_mode.currentText()
             
             # 获取源进制和目标进制
-            source_base_map = {"2进制": 2, "4进制": 4, "8进制": 8, "16进制": 16}
-            source_base = source_base_map.get(self.source_base.currentText(), 16)
-            target_base = 10 if self.target_base.currentText() == "10进制" else 16
-            
-            # 检查是否是支持的转换类型
-            if target_base != 10:
-                QMessageBox.warning(self, "警告", "当前仅支持转换为10进制")
-                return
+            base_map = {"2进制": 2, "4进制": 4, "8进制": 8, "10进制": 10, "16进制": 16}
+            source_base = base_map.get(self.source_base.currentText(), 16)
+            target_base = base_map.get(self.target_base.currentText(), 10)
             
             # 获取当前列数
             current_col_count = self.table.columnCount()
@@ -122,10 +118,10 @@ class DataConvertDialog(QDialog):
                     # 确保有偶数个值
                     if len(values) % 2 != 0:
                         continue  # 跳过无效行
-                decimal_values = []
+                converted_values = []
                 
                 if mode == "CAN模式":
-                    # 两两组合并转换为十进制
+                    # 两两组合并转换
                     for i in range(0, len(values), 2):
                         # 组合两个值（高位在前）
                         try:
@@ -134,21 +130,39 @@ class DataConvertDialog(QDialog):
                             low_val = int(values[i+1], source_base)
                             # 组合成16位值（高8位+低8位）
                             combined_val = (high_val << 8) + low_val
-                            decimal_values.append(str(combined_val))
+                            # 转换为目标进制
+                            if target_base == 2:
+                                converted_val = bin(combined_val)[2:]  # 去掉'0b'前缀
+                            elif target_base == 8:
+                                converted_val = oct(combined_val)[2:]  # 去掉'0o'前缀
+                            elif target_base == 16:
+                                converted_val = hex(combined_val)[2:].upper()  # 去掉'0x'前缀并转为大写
+                            else:  # target_base == 10
+                                converted_val = str(combined_val)
+                            converted_values.append(converted_val)
                         except ValueError:
-                            decimal_values.append("0")  # 转换失败时默认为0
+                            converted_values.append("0")  # 转换失败时默认为0
                 else:  # 正常模式
-                    # 直接转换每个值为十进制
+                    # 直接转换每个值
                     for value in values:
                         try:
                             decimal_val = int(value, source_base)
-                            decimal_values.append(str(decimal_val))
+                            # 转换为目标进制
+                            if target_base == 2:
+                                converted_val = bin(decimal_val)[2:]  # 去掉'0b'前缀
+                            elif target_base == 8:
+                                converted_val = oct(decimal_val)[2:]  # 去掉'0o'前缀
+                            elif target_base == 16:
+                                converted_val = hex(decimal_val)[2:].upper()  # 去掉'0x'前缀并转为大写
+                            else:  # target_base == 10
+                                converted_val = str(decimal_val)
+                            converted_values.append(converted_val)
                         except ValueError:
-                            decimal_values.append("0")  # 转换失败时默认为0
+                            converted_values.append("0")  # 转换失败时默认为0
                 
                 # 将转换结果写入新列
-                for i, decimal_val in enumerate(decimal_values):
-                    new_item = QTableWidgetItem(decimal_val)
+                for i, converted_val in enumerate(converted_values):
+                    new_item = QTableWidgetItem(converted_val)
                     self.table.setItem(row, current_col_count + i, new_item)
             
             # 发射内容变化信号，通知数据已修改
