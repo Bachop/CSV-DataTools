@@ -143,7 +143,7 @@ class FilterComparisonDialog(QDialog):
         # 显示筛选记录的表格
         self.records_table = QTableWidget()
         self.records_table.setColumnCount(3)
-        self.records_table.setHorizontalHeaderLabels(["日期", "时间", "UID序列号"])
+        self.records_table.setHorizontalHeaderLabels(["UID序列号"])#(["日期", "时间", "UID序列号"])
         self.records_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         layout.addWidget(self.records_table)
         
@@ -173,24 +173,24 @@ class FilterComparisonDialog(QDialog):
         
         # 提取第2列(日期)、第3列(时间)、第4列(UID)的数据
         filter_data = []
-        headers = ["日期", "时间", "UID序列号"]  # 对应第2、3、4列的列名
+        headers = ["UID序列号"]#["日期", "时间", "UID序列号"]
         filter_data.append(headers)
         
         for row in visible_rows:
             row_data = []
-            # 第2列(索引1)为日期
-            date_item = self.data_viewer.table.item(row, 1)
-            date_value = date_item.text() if date_item else ""
+            # # 第2列(索引1)为日期
+            # date_item = self.data_viewer.table.item(row, 1)
+            # date_value = date_item.text() if date_item else ""
             
-            # 第3列(索引2)为时间
-            time_item = self.data_viewer.table.item(row, 2)
-            time_value = time_item.text() if time_item else ""
+            # # 第3列(索引2)为时间
+            # time_item = self.data_viewer.table.item(row, 2)
+            # time_value = time_item.text() if time_item else ""
             
             # 第4列(索引3)为UID序列号
             uid_item = self.data_viewer.table.item(row, 3)
             uid_value = uid_item.text() if uid_item else ""
             
-            row_data.extend([date_value, time_value, uid_value])
+            row_data.extend([uid_value])#([date_value, time_value, uid_value])
             filter_data.append(row_data)
         
         # 确定保存路径
@@ -264,7 +264,7 @@ class FilterComparisonDialog(QDialog):
             return
         
         # 检查当前表格列数
-        if self.data_viewer.table.columnCount() < 4:
+        if self.data_viewer.table.columnCount() < 1:
             QMessageBox.warning(self, "警告", "当前数据表列数不足，无法进行对比")
             return
         
@@ -272,19 +272,19 @@ class FilterComparisonDialog(QDialog):
         matched_count = 0
         for row in range(self.data_viewer.table.rowCount()):
             # 获取当前行的第2、3、4列数据（日期、时间、UID）
-            date_item = self.data_viewer.table.item(row, 1)
-            time_item = self.data_viewer.table.item(row, 2)
+            # date_item = self.data_viewer.table.item(row, 1)
+            # time_item = self.data_viewer.table.item(row, 2)
             uid_item = self.data_viewer.table.item(row, 3)
             
-            date_value = date_item.text() if date_item else ""
-            time_value = time_item.text() if time_item else ""
+            # date_value = date_item.text() if date_item else ""
+            # time_value = time_item.text() if time_item else ""
             uid_value = uid_item.text() if uid_item else ""
             
             # 检查是否匹配任一筛选记录
             matched = False
             for record in self.filter_records:
-                # record格式: [日期, 时间, UID]
-                if len(record) >= 3 and (date_value, time_value, uid_value) == (record[0], record[1], record[2]):
+                # record格式: [UID]
+                if len(record) >= 1 and uid_value == record[0]:
                     matched = True
                     matched_count += 1
                     break

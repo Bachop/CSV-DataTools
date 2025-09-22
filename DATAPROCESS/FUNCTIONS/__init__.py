@@ -20,7 +20,6 @@ from .uid_data_processor import UIDDataProcessorDialog
 
 
 # 定义公共接口
-# 由于模块较多，建议按需导入具体模块而不是全部导入
 __all__ = [
     'BatchPlotDialog',
     'ColumnSelectionDialog',
