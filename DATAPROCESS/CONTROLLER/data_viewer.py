@@ -23,7 +23,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QCursor
 
 from SETTINGS import (
-    DEFAULT_WINDOW_SIZE, DEFAULT_ENCODING
+    DEFAULT_WINDOW_SIZE, DEFAULT_ENCODING, get_log_directory, ensure_directory_exists
     )
 
 from DATAPROCESS.FUNCTIONS import (EditableTable,DataConvertDialog,EncodingDialog,
@@ -381,18 +381,8 @@ class DataViewer(QDialog):
             if not default_filename.endswith('.csv'):
                 default_filename += '.csv'
             
-            # 设置默认保存路径为程序根目录下的Log文件夹
-            # 修改Log目录位置为与可执行文件同级目录
-            if getattr(sys, 'frozen', False):
-                # 如果是打包后的exe程序，使用exe所在目录
-                application_path = os.path.dirname(sys.executable)
-            else:
-                # 如果是python脚本运行，使用脚本所在目录
-                application_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            log_dir = os.path.join(application_path, 'Log')
-            # 如果Log目录不存在则创建
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
+            log_dir = get_log_directory()
+            ensure_directory_exists(log_dir)
             default_save_path = os.path.join(log_dir, default_filename)
                 
             file_path, _ = QFileDialog.getSaveFileName(

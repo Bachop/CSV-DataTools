@@ -507,6 +507,10 @@ class PlotWindow(QDialog):
             else:
                 # 显示选中的曲线
                 selected_labels = []
+                # 收集选中曲线的数据用于坐标轴自适应
+                selected_x_data = []
+                selected_y_data = []
+                
                 for i, col_idx in enumerate(self.y_data_dict.keys()):
                     color = colors[i % len(colors)]
                     marker = markers[i % len(markers)]
@@ -521,6 +525,9 @@ class PlotWindow(QDialog):
                             markersize=5, label=label, picker=3, linewidth=2
                         )
                         selected_labels.append(label)
+                        # 收集选中曲线的数据
+                        selected_x_data.extend(self.x_data_dict[col_idx])
+                        selected_y_data.extend(self.y_data_dict[col_idx])
                     # 其他曲线以低透明度显示作为参考
                     else:
                         self.ax1.plot(
@@ -542,6 +549,15 @@ class PlotWindow(QDialog):
                 self.ax1.grid(True)
                 # 禁用科学计数法
                 self.ax1.ticklabel_format(style='plain', axis='y')
+                
+                # 根据选中曲线的数据自动调整坐标轴范围
+                if selected_x_data and selected_y_data:
+                    x_min, x_max = min(selected_x_data), max(selected_x_data)
+                    y_min, y_max = min(selected_y_data), max(selected_y_data)
+                    x_margin = (x_max - x_min) * 0.05  # 5%边距
+                    y_margin = (y_max - y_min) * 0.05  # 5%边距
+                    self.ax1.set_xlim(x_min - x_margin, x_max + x_margin)
+                    self.ax1.set_ylim(y_min - y_margin, y_max + y_margin)
                 
                 # 如果只选中了一条曲线且有选择区域，显示在第二个子图
                 if len(self.selected_curves) == 1 and self.selection_start is not None and self.selection_end is not None:
