@@ -117,8 +117,7 @@ class DataViewer(QDialog):
         self.reset_filter_btn = QPushButton("重置筛选")
         
         # 添加筛选条件管理按钮
-        self.save_filter_conditions_btn = QPushButton("保存筛选条件")
-        self.compare_filter_conditions_btn = QPushButton("对比特定筛选")
+        self.filter_and_comparison_btn = QPushButton("条件比对筛选")
         
         # 列显示控制按钮
         self.toggle_columns_btn = QPushButton("查看列")
@@ -149,8 +148,7 @@ class DataViewer(QDialog):
         btn_layout.addWidget(self.toggle_columns_btn)  # 添加列显示控制按钮 
         btn_layout.addWidget(self.filter_btn)  # 添加筛选按钮 
         btn_layout.addWidget(self.reset_filter_btn)  # 添加重置筛选按钮 
-        btn_layout.addWidget(self.save_filter_conditions_btn)  # 添加保存筛选条件按钮 
-        btn_layout.addWidget(self.compare_filter_conditions_btn)  # 添加对比特定筛选按钮 
+        btn_layout.addWidget(self.filter_and_comparison_btn)  # 添加条件比对筛选按钮 
         btn_layout.addSpacing(20)
         btn_layout.addWidget(self.save_btn)  # 添加保存修改按钮 
         btn_layout.addStretch()
@@ -197,8 +195,7 @@ class DataViewer(QDialog):
         self.uid_analysis_btn.clicked.connect(self.uid_analysis)  # 连接UID数据处理按钮信号
         self.filter_btn.clicked.connect(self.filter_data)  # 连接筛选按钮信号
         self.reset_filter_btn.clicked.connect(self.reset_filter)  # 连接重置筛选按钮信号
-        self.save_filter_conditions_btn.clicked.connect(self.save_filter_conditions)  # 连接保存筛选条件按钮信号
-        self.compare_filter_conditions_btn.clicked.connect(self.compare_filter_conditions)  # 连接对比特定筛选按钮信号
+        self.filter_and_comparison_btn.clicked.connect(self.filter_and_comparison)  # 连接条件比对筛选按钮信号
         self.batch_plot_btn.clicked.connect(self.batch_plot_data)  # 连接批量绘制曲线按钮信号
         self.steady_state_diff_btn.clicked.connect(self.calculate_steady_state_diff)  # 连接稳态差值计算按钮信号
         self.toggle_columns_btn.clicked.connect(self.toggle_columns)  # 连接列显示控制按钮信号
@@ -940,18 +937,8 @@ class DataViewer(QDialog):
         """
         self.scatter_window = plot_scatter(self)
 
-    def save_filter_conditions(self):
-        """保存筛选条件"""
-        # 导入筛选条件管理对话框
-        from DATAPROCESS.FUNCTIONS import FilterComparisonDialog
-        
-        # 创建并显示筛选条件管理对话框
-        dialog = FilterComparisonDialog(self, self)
-        # 仅显示对话框，功能由对话框内部实现
-        dialog.exec_()
-    
-    def compare_filter_conditions(self):
-        """对比筛选条件"""
+    def filter_and_comparison(self):
+        """筛选与对比"""
         # 导入筛选条件管理对话框
         from DATAPROCESS.FUNCTIONS import FilterComparisonDialog
         

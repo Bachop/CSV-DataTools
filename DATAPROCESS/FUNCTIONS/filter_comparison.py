@@ -114,15 +114,15 @@ class FilterComparisonDialog(QDialog):
     
     def init_ui(self):
         """初始化界面"""
-        self.setWindowTitle("筛选条件管理")
+        self.setWindowTitle("条件比对筛选")
         self.resize(500, 300)
         
         layout = QVBoxLayout()
         
         # 添加说明标签
-        info_label = QLabel("筛选条件管理功能：\n"
+        info_label = QLabel("条件比对筛选功能：\n"
                            "1. 保存筛选条件：将当前筛选后的数据保存为筛选条件文件\n"
-                           "2. 对比特定筛选：导入筛选条件文件，对比数据表中的匹配项")
+                           "2. 对比特定筛选：导入筛选条件文件，对比后仅显示数据表中的匹配项")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
         
@@ -142,8 +142,8 @@ class FilterComparisonDialog(QDialog):
         
         # 显示筛选记录的表格
         self.records_table = QTableWidget()
-        self.records_table.setColumnCount(3)
-        self.records_table.setHorizontalHeaderLabels(["UID序列号"])#(["日期", "时间", "UID序列号"])
+        self.records_table.setColumnCount(1)
+        self.records_table.setHorizontalHeaderLabels(["UID序列号"])
         self.records_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         layout.addWidget(self.records_table)
         
