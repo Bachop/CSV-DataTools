@@ -292,7 +292,7 @@ class StatesLookupWindow(QDialog):
         # 创建状态段菜单项
         self.segment_actions = []
         for i, segment in enumerate(self.state_segments):
-            action = QAction(f"状态段 {i+1}(连1点数: {segment['length']})", self)
+            action = QAction(f"状态段 {i+1}", self)
             action.triggered.connect(lambda checked, x=i: self.show_segment(x))
             self.segment_menu.addAction(action)
             self.segment_actions.append(action)
