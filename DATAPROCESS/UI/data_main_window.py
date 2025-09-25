@@ -135,6 +135,10 @@ class DraggableTabBar(QTabBar):
         tab_widget.removeTab(source_index)
         
         # 在新位置插入标签页
+        # 修正：由于移除了源标签页，如果从前往后拖拽，需要调整目标索引
+        if source_index < target_index:
+            target_index -= 1
+            
         tab_widget.insertTab(target_index, widget, icon, text)
         tab_widget.setTabToolTip(target_index, tooltip)
         tab_widget.setTabWhatsThis(target_index, whats_this)
