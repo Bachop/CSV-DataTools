@@ -392,37 +392,27 @@ class DataViewer(QDialog):
                     # 获取表格数据
                     data = self.get_table_data()
                     
-                    # 避免文件覆盖 - 如果文件存在，则在文件名后添加序号
-                    base_name = os.path.splitext(file_path)[0]
-                    extension = os.path.splitext(file_path)[1]
-                    counter = 1
-                    unique_file_path = file_path
-                    
-                    while os.path.exists(unique_file_path):
-                        unique_file_path = f"{base_name}_{counter}{extension}"
-                        counter += 1
-                    
                     # 如果生成了新的文件路径，提示用户
-                    if unique_file_path != file_path:
+                    if file_path != file_path:
                         reply = QMessageBox.question(
                             self, 
                             "文件已存在", 
-                            f"文件 {os.path.basename(file_path)} 已存在。\n\n是否保存为 {os.path.basename(unique_file_path)}？",
+                            f"文件 {os.path.basename(file_path)} 已存在。\n\n是否保存为 {os.path.basename(file_path)}？",
                             QMessageBox.Yes | QMessageBox.No
                         )
                         if reply == QMessageBox.No:
                             return  # 用户选择不保存
                     
                     # 写入CSV文件
-                    with open(unique_file_path, 'w', newline='', encoding=self.encoding) as f:
+                    with open(file_path, 'w', newline='', encoding=self.encoding) as f:
                         writer = csv.writer(f)
                         writer.writerows(data)
                     
                     # 更新文件路径和标记
                     old_file_path = self.file_path
-                    self.file_path = unique_file_path
+                    self.file_path = file_path
                     self.is_new_file = False
-                    self.setWindowTitle(f"数据查看 - {os.path.basename(unique_file_path)}")
+                    self.setWindowTitle(f"数据查看 - {os.path.basename(file_path)}")
                     # 重置修改标记
                     
                     # 获取主窗口引用以更新viewers字典
@@ -452,7 +442,7 @@ class DataViewer(QDialog):
                         for i in range(main_window.tab_widget.count()):
                             if main_window.tab_widget.widget(i) == self:
                                 # 更新标签页标题为保存的文件名（不含*后缀）
-                                self.tab_title = os.path.basename(unique_file_path)
+                                self.tab_title = os.path.basename(file_path)
                                 main_window.tab_widget.setTabText(i, self.tab_title)
                                 break
                 
@@ -473,12 +463,8 @@ class DataViewer(QDialog):
                 # 获取表格数据
                 data = self.get_table_data()
                 
-                # 使用新的避免覆盖的文件名函数
-                from SETTINGS import get_unique_filename
-                unique_file_path = get_unique_filename(self.file_path)
-                
-                # 写入CSV文件
-                with open(unique_file_path, 'w', newline='', encoding=self.encoding) as f:
+                # 写入CSV文件 - 使用self.file_path而不是file_path
+                with open(self.file_path, 'w', newline='', encoding=self.encoding) as f:
                     writer = csv.writer(f)
                     writer.writerows(data)
                 
@@ -495,7 +481,7 @@ class DataViewer(QDialog):
                 if main_window and hasattr(main_window, 'status_bar'):
                     from datetime import datetime
                     current_time = datetime.now().strftime("%H:%M:%S")
-                    main_window.status_bar.showMessage(f'保存 {os.path.basename(unique_file_path)} 成功 {current_time} @Silver')
+                    main_window.status_bar.showMessage(f'保存 {os.path.basename(self.file_path)} 成功 {current_time} @Silver')
                 self.update_status_label()
             except Exception as e:
                 QMessageBox.critical(self, "保存失败", f"保存文件时出错: {str(e)}")
