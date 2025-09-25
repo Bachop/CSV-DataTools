@@ -438,7 +438,10 @@ class CrossFileBatchPlotDialog(QDialog):
                 # 保存图片
                 image_name = f"跨文件对比_{col_name}.png"
                 image_path = os.path.join(pic_dir, image_name)
-                plot_win.figure1.savefig(image_path, dpi=300, bbox_inches='tight')
+                # 使用新的避免覆盖的文件名函数
+                from SETTINGS import get_unique_filename
+                unique_image_path = get_unique_filename(image_path)
+                plot_win.figure1.savefig(unique_image_path, dpi=300, bbox_inches='tight')
                 
                 # 关闭绘图窗口
                 plot_win.close()
@@ -657,7 +660,10 @@ class BatchPlotDialog(QDialog):
                 # 保存图片
                 image_name = f"{file_name}_{plot_data['col_name']}.png"
                 image_path = os.path.join(pic_dir, image_name)
-                plot_win.figure1.savefig(image_path, dpi=300, bbox_inches='tight')
+                # 使用新的避免覆盖的文件名函数
+                from SETTINGS.utils import get_unique_filename
+                unique_image_path = get_unique_filename(image_path)
+                plot_win.figure1.savefig(unique_image_path, dpi=300, bbox_inches='tight')
 
                 # 关闭绘图窗口
                 plot_win.close()

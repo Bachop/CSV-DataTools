@@ -201,14 +201,17 @@ class FilterComparisonDialog(QDialog):
         log_dir = get_log_directory()
         ensure_directory_exists(log_dir)
         save_path = os.path.join(log_dir, file_name)
+        # 使用新的避免覆盖的文件名函数
+        from SETTINGS import get_unique_filename
+        unique_save_path = get_unique_filename(save_path)
         
         # 保存为CSV文件
         try:
-            with open(save_path, 'w', newline='', encoding='utf-8') as f:
+            with open(unique_save_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerows(filter_data)
             
-            QMessageBox.information(self, "保存成功", f"筛选条件已保存到: {save_path}")
+            QMessageBox.information(self, "保存成功", f"筛选条件已保存到: {unique_save_path}")
         except Exception as e:
             QMessageBox.critical(self, "保存失败", f"保存筛选条件时出错: {str(e)}")
     

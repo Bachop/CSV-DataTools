@@ -169,9 +169,12 @@ class SteadyStateDiffDialog(QDialog):
                 base_name = base_name[:-4]
             file_name = f"{base_name}-稳态差值.txt"
             file_path = os.path.join(log_dir, file_name)
+            # 使用新的避免覆盖的文件名函数
+            from SETTINGS import get_unique_filename
+            unique_file_path = get_unique_filename(file_path)
             
             # 写入文件
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(unique_file_path, 'w', encoding='utf-8') as f:
                 f.write("稳态差值计算结果\n")
                 f.write("=" * 50 + "\n")
                 f.write(f"稳态0点数: {steady0_count}\n")
@@ -189,5 +192,7 @@ class SteadyStateDiffDialog(QDialog):
                         f.write(f"  稳态1峰峰值: {result['steady1_pp']:.6f}\n")
                         f.write(f"  稳态差值(稳态1均值-稳态0均值): {result['diff']:.6f}\n")
                     f.write("\n")
+            
+            QMessageBox.information(self, "保存成功", f"计算结果已保存到: {unique_file_path}")
         except Exception as e:
             raise Exception(f"保存文件时出错: {str(e)}")

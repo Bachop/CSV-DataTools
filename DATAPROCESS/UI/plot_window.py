@@ -9,7 +9,7 @@ import os
 import sys
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTextEdit, QLabel, QFrame, QSplitter, QDesktopWidget,
-                             QWidget, QSizePolicy, QLineEdit, QFormLayout)
+                             QWidget, QSizePolicy, QLineEdit, QFormLayout,QMessageBox)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QCursor
 import platform
@@ -573,6 +573,11 @@ class PlotWindow(QDialog):
                             selected_y = self.y_data_dict[list(self.selected_curves)[0]][start_idx:end_idx+1]
                             
                             if len(selected_y) > 0:
+                                # 获取第一个图表中对应曲线的颜色
+                                selected_curve_idx = list(self.selected_curves)[0]
+                                color_index = list(self.y_data_dict.keys()).index(selected_curve_idx)
+                                color = colors[color_index % len(colors)]
+                                
                                 mean_val = np.mean(selected_y)
                                 self.ax2.plot(selected_x, selected_y, f'{color[0]}-', label=selected_labels[0])
                                 self.ax2.axhline(y=mean_val, color='r', linestyle='--', label=f'均值: {mean_val:.4f}')
@@ -992,7 +997,9 @@ class PlotWindow(QDialog):
                         selected_y = self.y_data_dict[col_idx][start_idx:end_idx+1]
                     
                         if len(selected_y) > 0:
-                            color = colors[i % len(colors)]
+                            # 获取第一个图表中对应曲线的颜色
+                            color_index = list(self.y_data_dict.keys()).index(col_idx)
+                            color = colors[color_index % len(colors)]
                             label = self.labels.get(col_idx, f"曲线 {col_idx+1}")
                         
                             self.ax2.plot(selected_x, selected_y, f'{color[0]}-', label=label)
@@ -1024,3 +1031,38 @@ class PlotWindow(QDialog):
         # 重置状态
         self.drag_start_x = None
         self.is_dragging = False
+    
+    def save_figure(self):
+        """保存图片"""
+        try:
+            # 确保保存目录存在
+            save_dir = get_pic_directory()
+            ensure_directory_exists(save_dir)
+            
+            # 生成默认文件名
+            default_name = "plot.png"
+            if hasattr(self, '_last_filename'):
+                default_name = self._last_filename
+            elif self.labels:
+                # 使用第一个标签作为文件名
+                first_label = list(self.labels.values())[0] if self.labels else "plot"
+                default_name = f"{first_label}.png"
+            
+            # 构造完整路径并获取唯一文件名
+            file_path = os.path.join(save_dir, default_name)
+            from SETTINGS import get_unique_filename
+            unique_file_path = get_unique_filename(file_path)
+            
+            # 保存图片
+            self.figure1.savefig(unique_file_path, dpi=DEFAULT_DPI, bbox_inches='tight')
+            subplots_file_path = unique_file_path.replace('.png', '_subplot.png')
+            self.figure2.savefig(subplots_file_path, dpi=DEFAULT_DPI, bbox_inches='tight')
+            
+            # 显示保存成功消息
+            QMessageBox.information(self, "保存成功", f"图片已保存到:\n{unique_file_path}")
+            
+            # 更新最后保存的文件名
+            self._last_filename = os.path.basename(unique_file_path)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"保存图片时出错:\n{str(e)}")

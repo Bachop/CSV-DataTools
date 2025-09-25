@@ -7,6 +7,7 @@
 """
 
 import os
+import re
 from PyQt5.QtWidgets import QFileDialog
 
 
@@ -124,6 +125,48 @@ def generate_log_filename(original_filepath, suffix="-筛选", extension=".csv")
         str: 生成的日志文件路径
     """
     return generate_related_filename(original_filepath, suffix, extension)
+
+
+def get_unique_filename(filepath):
+    """
+    获取唯一的文件名，如果文件已存在则添加序号
+    
+    Args:
+        filepath (str): 原始文件路径
+    
+    Returns:
+        str: 唯一的文件路径
+    """
+    # 如果文件不存在，直接返回原路径
+    if not os.path.exists(filepath):
+        return filepath
+    
+    # 分离目录、文件名和扩展名
+    directory = os.path.dirname(filepath)
+    basename = os.path.basename(filepath)
+    name, ext = os.path.splitext(basename)
+    
+    # 查找文件名中是否已经包含序号模式 (数字)
+    # 匹配类似 "filename(1)" 或 "filename(2)" 的模式
+    pattern = re.compile(r'^(.*)\((\d+)\)$')
+    match = pattern.match(name)
+    
+    if match:
+        # 如果已经有序号，提取基础文件名和当前序号
+        base_name = match.group(1)
+        counter = int(match.group(2))
+    else:
+        # 如果没有序号，基础文件名为当前文件名，序号从1开始
+        base_name = name
+        counter = 1
+    
+    # 循环查找第一个不存在的文件名
+    while True:
+        new_filename = f"{base_name}({counter}){ext}"
+        new_filepath = os.path.join(directory, new_filename)
+        if not os.path.exists(new_filepath):
+            return new_filepath
+        counter += 1
 
 
 def generate_diff_filename(original_filepath, suffix="-diff", extension=".csv"):

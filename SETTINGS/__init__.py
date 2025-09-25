@@ -24,4 +24,5 @@ __all__ = [
     'get_save_filename',
     'get_open_filename',
     'get_open_filenames'
+    'get_unique_filename'
 ]

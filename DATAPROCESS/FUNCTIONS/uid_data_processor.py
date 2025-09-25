@@ -218,14 +218,17 @@ class UIDDataProcessorDialog(QDialog):
                 file_name = "processed_data-diff.csv"
                 
             file_path = os.path.join(log_dir, file_name)
+            # 使用新的避免覆盖的文件名函数
+            from SETTINGS import get_unique_filename
+            unique_file_path = get_unique_filename(file_path)
             
             # 保存为新文件
-            with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+            with open(unique_file_path, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerow(processed_headers)
                 writer.writerows(processed_data)
             
-            QMessageBox.information(self, "成功", f"数据已处理并保存到: {file_path}")
+            QMessageBox.information(self, "成功", f"数据已处理并保存到: {unique_file_path}")
             self.accept()
             
         except Exception as e:

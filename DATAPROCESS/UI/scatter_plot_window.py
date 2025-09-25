@@ -114,14 +114,17 @@ class ScatterPlotWindow(QDialog):
                     file_path, _ = QFileDialog.getSaveFileName(
                         self.toolbar,
                         "保存图片",
-                        os.path.join(pic_dir, default_filename),  # 使用自定义文件名作为默认文件名
+                        os.path.join(self.pic_dir, self.default_filename),  # 使用自定义文件名作为默认文件名
                         "PNG Files (*.png);;JPEG Files (*.jpg *.jpeg);;PDF Files (*.pdf);;SVG Files (*.svg)",
                         "PNG Files (*.png)"
                     )
                     
                     # 如果用户选择了文件路径，则保存图像
                     if file_path:
-                        self.figure.savefig(file_path, dpi=DEFAULT_DPI, bbox_inches='tight')
+                        # 使用新的避免覆盖的文件名函数
+                        from SETTINGS import get_unique_filename
+                        unique_file_path = get_unique_filename(file_path)
+                        self.figure.savefig(unique_file_path, dpi=DEFAULT_DPI, bbox_inches='tight')
                 finally:
                     # 恢复原来的目录
                     os.chdir(old_dir)
