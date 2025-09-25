@@ -17,7 +17,8 @@ from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent, QDragLeaveE
 from SETTINGS import (
                         APP_NAME, DEFAULT_WINDOW_SIZE, CSV_FILE_FILTER, ALL_FILE_FILTER,
                         DEFAULT_BUTTON_SIZE, ICON,
-                        get_log_directory, get_pic_directory, ensure_directory_exists
+                        get_log_directory, ensure_directory_exists, 
+                        open_log_directory, open_pic_directory
                       ) 
 
 class DraggableTabBar(QTabBar):
@@ -220,13 +221,13 @@ class DataMainWindow(QMainWindow):
         
         # 添加Log目录按钮
         self.log_dir_btn = QPushButton('Log目录')
-        self.log_dir_btn.clicked.connect(self.open_log_directory)
+        self.log_dir_btn.clicked.connect(open_log_directory)
         self.log_dir_btn.setFixedSize(*DEFAULT_BUTTON_SIZE)  # 设置Log目录按钮大小
         button_layout.addWidget(self.log_dir_btn)  # 不添加扩展因子，保持固定宽度
         
         # 添加Pic目录按钮
         self.pic_dir_btn = QPushButton('Pic目录')
-        self.pic_dir_btn.clicked.connect(self.open_pic_directory)
+        self.pic_dir_btn.clicked.connect(open_pic_directory)
         self.pic_dir_btn.setFixedSize(*DEFAULT_BUTTON_SIZE)  # 设置Pic目录按钮大小
         button_layout.addWidget(self.pic_dir_btn)  # 不添加扩展因子，保持固定宽度
         
@@ -592,43 +593,6 @@ class DataMainWindow(QMainWindow):
         if file_paths:
             self.open_files(file_paths)
     
-    def open_log_directory(self):
-        """打开Log目录"""
-        # 获取Log目录路径
-        log_dir = get_log_directory()
-        # 确保Log目录存在
-        ensure_directory_exists(log_dir)
-        
-        # 在资源管理器中打开Log目录
-        try:
-            if os.name == 'nt':  # Windows
-                # 使用标准的Windows命令行格式
-                import subprocess
-                subprocess.Popen(['explorer', log_dir], close_fds=True)
-            elif os.name == 'posix':  # macOS/Linux
-                import subprocess
-                subprocess.Popen(['xdg-open', log_dir], close_fds=True)
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法打开Log目录: {str(e)}")
-
-    def open_pic_directory(self):
-        """打开Pic目录"""
-        # 获取Pic目录路径
-        pic_dir = get_pic_directory()
-        # 确保Pic目录存在
-        ensure_directory_exists(pic_dir)
-        
-        # 在资源管理器中打开Pic目录
-        try:
-            if os.name == 'nt':  # Windows
-                # 使用标准的Windows命令行格式
-                import subprocess
-                subprocess.Popen(['explorer', pic_dir], close_fds=True)
-            elif os.name == 'posix':  # macOS/Linux
-                import subprocess
-                subprocess.Popen(['xdg-open', pic_dir], close_fds=True)
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法打开Pic目录: {str(e)}")
     
     def center(self):
         """将窗口居中显示"""

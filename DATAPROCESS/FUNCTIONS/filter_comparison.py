@@ -167,25 +167,18 @@ class FilterComparisonDialog(QDialog):
             return
         
         # 检查列数是否足够
-        if self.data_viewer.table.columnCount() < 4:
-            QMessageBox.warning(self, "警告", "数据列数不足，至少需要4列")
+        if self.data_viewer.table.columnCount() < 1:
+            QMessageBox.warning(self, "警告", "数据列数不足，至少需要1列")
             return
         
-        # 提取第2列(日期)、第3列(时间)、第4列(UID)的数据
+        # 提取第4列(UID)的数据
         filter_data = []
-        headers = ["UID序列号"]#["日期", "时间", "UID序列号"]
+        headers = ["UID序列号"]
         filter_data.append(headers)
         
         for row in visible_rows:
             row_data = []
-            # # 第2列(索引1)为日期
-            # date_item = self.data_viewer.table.item(row, 1)
-            # date_value = date_item.text() if date_item else ""
-            
-            # # 第3列(索引2)为时间
-            # time_item = self.data_viewer.table.item(row, 2)
-            # time_value = time_item.text() if time_item else ""
-            
+
             # 第4列(索引3)为UID序列号
             uid_item = self.data_viewer.table.item(row, 3)
             uid_value = uid_item.text() if uid_item else ""
@@ -217,9 +210,10 @@ class FilterComparisonDialog(QDialog):
     
     def compare_filter_conditions(self):
         """对比特定筛选条件"""
+        
         # 选择筛选条件文件
         file_path, _ = QFileDialog.getOpenFileName(
-            self, '选择筛选条件文件', '', 'CSV文件 (*.csv);;所有文件 (*)')
+            self, "选择筛选条件文件", get_log_directory(), "CSV文件 (*.csv)")
         
         if not file_path:
             return
@@ -274,13 +268,9 @@ class FilterComparisonDialog(QDialog):
         # 遍历所有行，检查是否匹配筛选条件
         matched_count = 0
         for row in range(self.data_viewer.table.rowCount()):
-            # 获取当前行的第2、3、4列数据（日期、时间、UID）
-            # date_item = self.data_viewer.table.item(row, 1)
-            # time_item = self.data_viewer.table.item(row, 2)
+            # 获取当前行的第4列数据（UID）
             uid_item = self.data_viewer.table.item(row, 3)
             
-            # date_value = date_item.text() if date_item else ""
-            # time_value = time_item.text() if time_item else ""
             uid_value = uid_item.text() if uid_item else ""
             
             # 检查是否匹配任一筛选记录

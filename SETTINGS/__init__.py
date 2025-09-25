@@ -25,4 +25,6 @@ __all__ = [
     'get_open_filename',
     'get_open_filenames'
     'get_unique_filename'
+    'open_pic_directory',
+    'open_log_directory'
 ]

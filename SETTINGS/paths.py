@@ -90,3 +90,35 @@ def ensure_directory_exists(directory_path):
         except OSError:
             # 目录可能在检查后被其他进程创建，忽略错误
             pass
+
+def open_log_directory(self):
+    """打开Log目录"""
+    # 获取Log目录路径
+    log_dir = get_log_directory()
+    # 确保Log目录存在
+    ensure_directory_exists(log_dir)
+    
+    # 在资源管理器中打开Log目录
+    if os.name == 'nt':  # Windows
+        # 使用标准的Windows命令行格式
+        import subprocess
+        subprocess.Popen(['explorer', log_dir], close_fds=True)
+    elif os.name == 'posix':  # macOS/Linux
+            import subprocess
+            subprocess.Popen(['explorer', log_dir], close_fds=True)
+
+def open_pic_directory(self):
+    """打开Pic目录"""
+    # 获取Pic目录路径
+    pic_dir = get_pic_directory()
+    # 确保Pic目录存在
+    ensure_directory_exists(pic_dir)
+    
+    # 在资源管理器中打开Pic目录
+    if os.name == 'nt':  # Windows
+        # 使用标准的Windows命令行格式
+        import subprocess
+        subprocess.Popen(['explorer', pic_dir], close_fds=True)
+    elif os.name == 'posix':  # macOS/Linux
+        import subprocess
+        subprocess.Popen(['explorer', pic_dir], close_fds=True)
