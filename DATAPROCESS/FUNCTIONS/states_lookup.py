@@ -11,11 +11,145 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QDialogButtonBox, QAction, QToolButton,
                              QGroupBox, QFileDialog, QStyle, QMenu, QTextEdit,
                              QLineEdit, QFormLayout)
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtGui import QFont, QIcon, QKeyEvent
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+
+
+class NoArrowLineEdit(QLineEdit):
+    """自定义LineEdit，防止方向键事件被拦截"""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+    def keyPressEvent(self, event):
+        """处理键盘事件，将方向键事件传递给父窗口"""
+        if event.key() in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
+            # 将方向键事件传递给父窗口
+            if self.parent():
+                self.parent().keyPressEvent(event)
+            event.accept()
+            return
+        # 其他按键按默认处理
+        super().keyPressEvent(event)
+
+
+class SegmentDropdownButton(QToolButton):
+    """支持键盘导航的状态段选择下拉按钮"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.segment_menu = None
+        self.current_index = -1
+        self.actions = []
+        # 启用鼠标跟踪，确保能接收到鼠标事件
+        self.setMouseTracking(True)
+        # 安装事件过滤器以处理鼠标滚轮事件
+        self.installEventFilter(self)
+        
+    def setMenu(self, menu):
+        """设置菜单并保存引用"""
+        super().setMenu(menu)
+        self.segment_menu = menu
+        self.actions = menu.actions()
+        
+    def keyPressEvent(self, event):
+        """处理键盘事件，支持方向键导航"""
+        if self.segment_menu and self.segment_menu.isVisible():
+            if event.key() == Qt.Key_Up or event.key() == Qt.Key_Left:
+                self.navigate_up()
+                event.accept()
+                return
+            elif event.key() == Qt.Key_Down or event.key() == Qt.Key_Right:
+                self.navigate_down()
+                event.accept()
+                return
+            elif event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                self.activate_current_action()
+                event.accept()
+                return
+            elif event.key() == Qt.Key_Escape:
+                self.segment_menu.hide()
+                event.accept()
+                return
+                
+        # 对于其他按键，调用父类处理
+        super().keyPressEvent(event)
+        
+    def eventFilter(self, obj, event):
+        """事件过滤器，用于处理鼠标滚轮事件"""
+        # 检查事件是否为鼠标滚轮事件，且菜单未显示
+        if event.type() == QEvent.Wheel and self.segment_menu and not self.segment_menu.isVisible():
+            # 获取滚轮滚动方向
+            delta = event.angleDelta().y()
+            if delta > 0:  # 向上滚动
+                if hasattr(self.parent(), 'navigate_segments'):
+                    self.parent().navigate_segments(-1)  # 导航到上一个状态段
+            elif delta < 0:  # 向下滚动
+                if hasattr(self.parent(), 'navigate_segments'):
+                    self.parent().navigate_segments(1)   # 导航到下一个状态段
+                    
+            return True  # 事件已处理
+            
+        return super().eventFilter(obj, event)
+        
+    def navigate_up(self):
+        """向上导航到上一个菜单项"""
+        if not self.actions:
+            return
+            
+        if self.current_index == -1:
+            # 如果当前没有选中项，选中最后一个
+            self.current_index = len(self.actions) - 1
+        else:
+            # 向上移动，如果在顶部则跳转到底部
+            self.current_index = (self.current_index - 1) % len(self.actions)
+            
+        self.update_menu_selection()
+        
+    def navigate_down(self):
+        """向下导航到下一个菜单项"""
+        if not self.actions:
+            return
+            
+        if self.current_index == -1:
+            # 如果当前没有选中项，选中第一个
+            self.current_index = 0
+        else:
+            # 向下移动，如果在底部则跳转到顶部
+            self.current_index = (self.current_index + 1) % len(self.actions)
+            
+        self.update_menu_selection()
+        
+    def update_menu_selection(self):
+        """更新菜单选择状态"""
+        # 清除之前的选择状态
+        for i, action in enumerate(self.actions):
+            if i == self.current_index:
+                # 设置为选中状态样式
+                action.setFont(QFont(action.font().family(), action.font().pointSize(), QFont.Bold))
+            else:
+                # 恢复正常样式
+                action.setFont(QFont(action.font().family(), action.font().pointSize(), QFont.Normal))
+                
+    def activate_current_action(self):
+        """激活当前选中的菜单项"""
+        if 0 <= self.current_index < len(self.actions):
+            action = self.actions[self.current_index]
+            action.trigger()
+            if self.segment_menu:
+                self.segment_menu.hide()
+                
+    def showMenu(self):
+        """显示菜单时重置当前索引"""
+        self.current_index = -1
+        if self.segment_menu:
+            # 重置所有菜单项样式
+            for action in self.actions:
+                action.setFont(QFont(action.font().family(), action.font().pointSize(), QFont.Normal))
+        super().showMenu()
 
 
 class StatesColumnSelectionDialog(QDialog):
@@ -148,9 +282,16 @@ class StatesLookupWindow(QDialog):
         self.left_points = 30
         self.right_points = 30
         
+        # 当前选中的状态段索引
+        self.current_segment_index = -1
+        
         self.setWindowTitle("状态变量检测")
         self.resize(1600, 900)  # 调整默认大小以适应不同分辨率
         self.setWindowFlags(Qt.Window | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint)  # 支持最大化最小化
+        
+        # 设置焦点策略，确保窗口能接收键盘事件
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setAttribute(Qt.WA_KeyCompression, False)
         
         # 初始化Matplotlib支持中文
         self.setup_matplotlib_chinese_support()
@@ -280,7 +421,7 @@ class StatesLookupWindow(QDialog):
         segment_layout = QVBoxLayout(segment_group)
 
         # 创建下拉按钮
-        self.segment_dropdown = QToolButton()
+        self.segment_dropdown = SegmentDropdownButton()
         self.segment_dropdown.setText("选择状态段")
         self.segment_dropdown.setPopupMode(QToolButton.InstantPopup)
         self.segment_dropdown.setToolButtonStyle(Qt.ToolButtonTextOnly)
@@ -303,8 +444,9 @@ class StatesLookupWindow(QDialog):
         points_group = QGroupBox("检测点数设置")
         points_layout = QFormLayout(points_group)
         
-        self.left_points_edit = QLineEdit(str(self.left_points))
-        self.right_points_edit = QLineEdit(str(self.right_points))
+        # 使用自定义LineEdit以防止方向键被拦截
+        self.left_points_edit = NoArrowLineEdit(str(self.left_points))
+        self.right_points_edit = NoArrowLineEdit(str(self.right_points))
         
         points_layout.addRow("左侧检测点数:", self.left_points_edit)
         points_layout.addRow("右侧检测点数:", self.right_points_edit)
@@ -368,9 +510,9 @@ class StatesLookupWindow(QDialog):
                 self.right_points = right_points
                 
                 # 重新显示当前段（如果有选中的话）
-                # 这里需要获取当前选中的段，暂时用一个简单的方法
-                if hasattr(self, '_current_segment_index'):
-                    self.show_segment(self._current_segment_index)
+                # 修复：使用正确的属性名current_segment_index而不是_current_segment_index
+                if self.current_segment_index >= 0:
+                    self.show_segment(self.current_segment_index)
             else:
                 from PyQt5.QtWidgets import QMessageBox
                 QMessageBox.warning(self, "警告", "检测点数必须为非负整数！")
@@ -499,14 +641,47 @@ class StatesLookupWindow(QDialog):
                         self.show_coord_tooltip(x_data, y_data)
             return
     
+    def keyPressEvent(self, event):
+        """处理键盘事件，支持方向键切换状态段"""
+        # 确保事件不会被其他控件处理
+        if self.state_segments and event.key() in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
+            if event.key() == Qt.Key_Up or event.key() == Qt.Key_Left:
+                self.navigate_segments(-1)
+            elif event.key() == Qt.Key_Down or event.key() == Qt.Key_Right:
+                self.navigate_segments(1)
+            event.accept()  # 标记事件已被处理
+            return
+        super().keyPressEvent(event)
+    
+    def keyReleaseEvent(self, event):
+        """处理键盘释放事件"""
+        # 空实现，但确保事件不会向上传播
+        event.accept()
+    
+    def navigate_segments(self, direction):
+        """导航到下一个或上一个状态段"""
+        if not self.state_segments:
+            return
+            
+        if self.current_segment_index == -1:
+            # 如果还没有选中任何段，默认选择第一个
+            if direction > 0:  # 向下导航
+                new_index = 0
+            else:  # 向上导航
+                new_index = len(self.state_segments) - 1
+        else:
+            # 计算新的索引，实现循环导航
+            new_index = (self.current_segment_index + direction) % len(self.state_segments)
+            
+        self.show_segment(new_index)
+    
     def show_segment(self, segment_index):
         """显示指定状态段的数据"""
         if not self.state_segments or segment_index >= len(self.state_segments):
             return
             
         # 保存当前段索引
-        self._current_segment_index = segment_index
-            
+        self.current_segment_index = segment_index
         segment = self.state_segments[segment_index]
         
         # 更新下拉按钮文本
