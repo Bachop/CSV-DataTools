@@ -46,13 +46,13 @@ class SteadyStateDiffDialog(QDialog):
         # 稳态0点数输入
         layout.addWidget(QLabel("稳态0点数（从第1行向下计数）:"))
         self.steady0_count_edit = QLineEdit()
-        self.steady0_count_edit.setText("20")  # 默认取20个点
+        self.steady0_count_edit.setText("50")  # 默认取点数
         layout.addWidget(self.steady0_count_edit)
         
         # 稳态1点数输入
         layout.addWidget(QLabel("稳态1点数（从最后行向上计数）:"))
         self.steady1_count_edit = QLineEdit()
-        self.steady1_count_edit.setText("20")  # 默认取20个点
+        self.steady1_count_edit.setText("50")  # 默认取点数
         layout.addWidget(self.steady1_count_edit)
         
         # 按钮
@@ -163,13 +163,26 @@ class SteadyStateDiffDialog(QDialog):
             log_dir = get_log_directory()
             ensure_directory_exists(log_dir)
             
-            # 生成文件名
-            base_name = getattr(self.parent(), 'file_name', 'data')
-            if base_name.endswith('.csv'):
-                base_name = base_name[:-4]
+            # 生成文件名：优先使用对话框自身被调用者设置的 file_name，其次尝试从 parent 的 file_path 或 tab_title
+            # 最后回退到 'data'。统一使用 os.path.splitext 去除扩展名。
+            base_name = 'data'
+
+            # 如果调用方在 dialog 实例上设置了 file_name（DataViewer.calculate_steady_state_diff 会这样做），优先使用
+            if hasattr(self, 'file_name') and self.file_name:
+                base_name = os.path.splitext(os.path.basename(self.file_name))[0]
+            else:
+                parent = self.parent()
+                # 尝试从 parent.file_path 获取
+                if parent is not None:
+                    if hasattr(parent, 'file_path') and parent.file_path:
+                        base_name = os.path.splitext(os.path.basename(parent.file_path))[0]
+                    # 作为次优先，从 parent 的 tab_title 推断（可能存在）
+                    elif hasattr(parent, 'tab_title') and parent.tab_title:
+                        base_name = os.path.splitext(parent.tab_title)[0]
+
             file_name = f"{base_name}-稳态差值.txt"
             file_path = os.path.join(log_dir, file_name)
-            # 使用新的避免覆盖的文件名函数
+            # 使用现有的避免覆盖的文件名函数
             from SETTINGS import get_unique_filename
             unique_file_path = get_unique_filename(file_path)
             
