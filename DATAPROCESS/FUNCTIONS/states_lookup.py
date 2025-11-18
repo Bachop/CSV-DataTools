@@ -622,6 +622,16 @@ class StatesLookupWindow(QDialog):
         curves_layout.addWidget(self.curve_buttons_widget)
         right_layout.addWidget(curves_group)
 
+        # 使用提示标签（鼠标中键平移，滚轮缩放，按 R 复位）
+        try:
+            from PyQt5.QtWidgets import QLabel
+            self.hint_label = QLabel("提示: 左键拖拽平移，滚轮缩放，按 R 恢复视图")
+            self.hint_label.setWordWrap(True)
+            self.hint_label.setStyleSheet('color: gray; font-size: 16px;')
+            right_layout.addWidget(self.hint_label)
+        except Exception:
+            pass
+
         # 添加到右侧布局
         right_layout.addWidget(segment_group)
         right_layout.addWidget(points_group)
@@ -645,9 +655,26 @@ class StatesLookupWindow(QDialog):
         # 连接鼠标事件
         self.canvas1.mpl_connect('button_press_event', self.on_mouse_press)
         self.canvas2.mpl_connect('button_press_event', self.on_mouse_press)
+        # 连接滚轮缩放事件
+        self.canvas1.mpl_connect('scroll_event', self.on_scroll)
+        self.canvas2.mpl_connect('scroll_event', self.on_scroll)
+        # 连接平移相关事件（鼠标移动与释放）
+        self.canvas1.mpl_connect('motion_notify_event', self.on_mouse_move)
+        self.canvas1.mpl_connect('button_release_event', self.on_mouse_release)
+        self.canvas2.mpl_connect('motion_notify_event', self.on_mouse_move)
+        self.canvas2.mpl_connect('button_release_event', self.on_mouse_release)
         
         # 初始化状态变量
         self.coord_tooltip = None
+        # 平移(pan)状态变量
+        self.is_panning = False
+        self.pan_ax = None
+        self.pan_start_x = None
+        self.pan_start_y = None
+        self.pan_orig_xlim = None
+        self.pan_orig_ylim = None
+        # 使用左键（mouse button 1）启动平移
+        self.pan_button = 1
 
         # 在设置完UI后刷新画布
         self.figure1.tight_layout()
@@ -739,6 +766,68 @@ class StatesLookupWindow(QDialog):
                 self.coord_tooltip = None
             except:
                 self.coord_tooltip = None
+
+    def on_scroll(self, event):
+        """处理滚轮缩放事件：以鼠标指向的点为中心对当前坐标轴进行缩放"""
+        try:
+            ax = event.inaxes
+            if ax is None:
+                return
+
+            # zoom in when scrolling up, zoom out when scrolling down
+            base_scale = 0.9
+            # event.step may not be present in older mpl; use event.button 'up'/'down'
+            try:
+                direction = 1 if getattr(event, 'step', 0) > 0 else -1
+            except Exception:
+                direction = 1 if getattr(event, 'button', '') == 'up' else -1
+
+            scale_factor = base_scale if direction > 0 else 1.0 / base_scale
+
+            # Get mouse position in data coordinates
+            xdata = event.xdata
+            ydata = event.ydata
+
+            # If no data coords, use axis center
+            if xdata is None or ydata is None:
+                xlim = ax.get_xlim()
+                ylim = ax.get_ylim()
+                xdata = (xlim[0] + xlim[1]) / 2.0
+                ydata = (ylim[0] + ylim[1]) / 2.0
+
+            # Compute new limits
+            x_left, x_right = ax.get_xlim()
+            y_bottom, y_top = ax.get_ylim()
+
+            new_width_left = (xdata - x_left) * scale_factor
+            new_width_right = (x_right - xdata) * scale_factor
+            new_x_left = xdata - new_width_left
+            new_x_right = xdata + new_width_right
+
+            new_height_bottom = (ydata - y_bottom) * scale_factor
+            new_height_top = (y_top - ydata) * scale_factor
+            new_y_bottom = ydata - new_height_bottom
+            new_y_top = ydata + new_height_top
+
+            ax.set_xlim(new_x_left, new_x_right)
+            ax.set_ylim(new_y_bottom, new_y_top)
+
+            # redraw the appropriate canvas
+            try:
+                if ax in (self.ax1_cap, self.ax1_state):
+                    self.canvas1.draw_idle()
+                elif ax in (self.ax2_cap, self.ax2_state):
+                    self.canvas2.draw_idle()
+                else:
+                    # fallback: redraw both
+                    self.canvas1.draw_idle()
+                    self.canvas2.draw_idle()
+            except Exception:
+                self.canvas1.draw()
+                self.canvas2.draw()
+        except Exception:
+            # swallow exceptions to avoid breaking interaction
+            pass
     
     def on_mouse_press(self, event):
         """处理鼠标按下事件"""
@@ -747,7 +836,19 @@ class StatesLookupWindow(QDialog):
         # 验证事件
         if not event.inaxes or event.xdata is None or event.ydata is None:
             return
-        
+        # 左键启动平移
+        if event.button == self.pan_button:
+            try:
+                self.is_panning = True
+                self.pan_ax = event.inaxes
+                self.pan_start_x = event.xdata
+                self.pan_start_y = event.ydata
+                self.pan_orig_xlim = self.pan_ax.get_xlim()
+                self.pan_orig_ylim = self.pan_ax.get_ylim()
+            except Exception:
+                self.is_panning = False
+            return
+
         # 右键显示坐标
         if event.button == 3:  # 右键
             # 判断是哪个图表被点击
@@ -823,10 +924,73 @@ class StatesLookupWindow(QDialog):
                         y_data = self.state_data[x_data]
                         self.show_coord_tooltip(x_data, y_data)
             return
+
+    def on_mouse_move(self, event):
+        """处理鼠标移动事件：用于平移"""
+        try:
+            if not getattr(self, 'is_panning', False):
+                return
+
+            if self.pan_ax is None or event.inaxes is None:
+                return
+
+            # 需要有效的数据坐标
+            if event.xdata is None or event.ydata is None:
+                return
+
+            # 计算偏移（以数据坐标为单位）
+            dx = self.pan_start_x - event.xdata
+            dy = self.pan_start_y - event.ydata
+
+            new_xlim = (self.pan_orig_xlim[0] + dx, self.pan_orig_xlim[1] + dx)
+            new_ylim = (self.pan_orig_ylim[0] + dy, self.pan_orig_ylim[1] + dy)
+
+            try:
+                self.pan_ax.set_xlim(new_xlim)
+                self.pan_ax.set_ylim(new_ylim)
+            except Exception:
+                pass
+
+            # 重绘对应的画布
+            try:
+                if self.pan_ax in (self.ax1_cap, self.ax1_state):
+                    self.canvas1.draw_idle()
+                else:
+                    self.canvas2.draw_idle()
+            except Exception:
+                try:
+                    self.canvas1.draw()
+                    self.canvas2.draw()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def on_mouse_release(self, event):
+        """处理鼠标释放事件：停止平移"""
+        try:
+            if getattr(self, 'is_panning', False):
+                self.is_panning = False
+                self.pan_ax = None
+                self.pan_start_x = None
+                self.pan_start_y = None
+                self.pan_orig_xlim = None
+                self.pan_orig_ylim = None
+        except Exception:
+            pass
     
     def keyPressEvent(self, event):
         """处理键盘事件，支持方向键切换状态段"""
         # 确保事件不会被其他控件处理
+        # 按 R 键复位视图
+        if event.key() == Qt.Key_R:
+            try:
+                self.reset_view()
+            except Exception:
+                pass
+            event.accept()
+            return
+
         if self.state_segments and event.key() in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
             if event.key() == Qt.Key_Up or event.key() == Qt.Key_Left:
                 self.navigate_segments(-1)
@@ -857,6 +1021,22 @@ class StatesLookupWindow(QDialog):
             new_index = (self.current_segment_index + direction) % len(self.state_segments)
             
         self.show_segment(new_index)
+
+    def reset_view(self):
+        """将所有图表恢复到默认位置/缩放：重新绘制全图与当前段（触发自动缩放逻辑）。"""
+        try:
+            # 重新绘制全图（其中包含基于选中曲线或所有曲线的自适应缩放）
+            self._plot_all_data()
+        except Exception:
+            pass
+
+        # 如果有当前段，重新绘制段图（同样包含自适应缩放）
+        try:
+            if self.current_segment_index >= 0 and self.state_segments:
+                seg = self.state_segments[self.current_segment_index]
+                self._plot_segment_data(seg)
+        except Exception:
+            pass
     
     def show_segment(self, segment_index):
         """显示指定状态段的数据"""
