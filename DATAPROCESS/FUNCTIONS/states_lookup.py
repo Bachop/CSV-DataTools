@@ -703,7 +703,7 @@ class StatesLookupWindow(QDialog):
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, "警告", "请输入有效的整数！")
     
-    def is_click_on_curve(self, x, y, ax, x_data, y_data, pixel_threshold=5):
+    def is_click_on_curve(self, x, y, ax, x_data, y_data, pixel_threshold=10):
         """检查点击是否在曲线上"""
         if not x_data or not ax:
             return False, None
@@ -726,7 +726,7 @@ class StatesLookupWindow(QDialog):
         except Exception:
             return False, None
     
-    def show_coord_tooltip(self, x, y):
+    def show_coord_tooltip(self, x, y, x_click=None, y_click=None):
         """显示坐标提示框"""
         self.hide_coord_tooltip()
         
@@ -746,12 +746,26 @@ class StatesLookupWindow(QDialog):
             self.coord_tooltip.setWindowFlags(Qt.ToolTip)
             
             # 定位提示框
-            pos = self.mapFromGlobal(QCursor.pos())
             tooltip_width = self.coord_tooltip.sizeHint().width()
             tooltip_height = self.coord_tooltip.sizeHint().height()
             
-            x_pos = min(pos.x() + 10, self.width() - tooltip_width - 10)
-            y_pos = min(pos.y() + 10, self.height() - tooltip_height - 10)
+            # 如果提供了点击坐标，则使用点击位置作为提示框的基准位置
+            if x_click is not None and y_click is not None:
+                # 获取光标位置
+                cursor_pos = QCursor.pos()
+                # 将光标位置转换为窗口坐标
+                pos = self.mapFromGlobal(cursor_pos)
+                x_pos = pos.x()
+                y_pos = pos.y()
+            else:
+                # 如果没有提供点击坐标，使用光标位置
+                pos = self.mapFromGlobal(QCursor.pos())
+                x_pos = pos.x()
+                y_pos = pos.y()
+            
+            # 确保提示框不会超出窗口边界
+            x_pos = max(10, min(x_pos + 10, self.width() - tooltip_width - 10))
+            y_pos = max(10, min(y_pos + 10, self.height() - tooltip_height - 10))
             
             self.coord_tooltip.move(x_pos, y_pos)
             self.coord_tooltip.show()
@@ -775,7 +789,7 @@ class StatesLookupWindow(QDialog):
                 return
 
             # zoom in when scrolling up, zoom out when scrolling down
-            base_scale = 0.9
+            base_scale = 0.4
             # event.step may not be present in older mpl; use event.button 'up'/'down'
             try:
                 direction = 1 if getattr(event, 'step', 0) > 0 else -1
@@ -808,6 +822,26 @@ class StatesLookupWindow(QDialog):
             ax.set_xlim(new_x_left, new_x_right)
             # 不再修改Y轴范围
             # ax.set_ylim(new_y_bottom, new_y_top)
+
+            # 同步同一splitter中的另一个图表
+            sync_ax = None
+            target_canvas = None
+            if ax == self.ax1_cap:
+                sync_ax = self.ax1_state
+                target_canvas = self.canvas1
+            elif ax == self.ax1_state:
+                sync_ax = self.ax1_cap
+                target_canvas = self.canvas1
+            elif ax == self.ax2_cap:
+                sync_ax = self.ax2_state
+                target_canvas = self.canvas2
+            elif ax == self.ax2_state:
+                sync_ax = self.ax2_cap
+                target_canvas = self.canvas2
+
+            # 如果找到需要同步的轴，则同步x轴范围
+            if sync_ax is not None:
+                sync_ax.set_xlim(new_x_left, new_x_right)
 
             # redraw the appropriate canvas
             try:
@@ -871,7 +905,7 @@ class StatesLookupWindow(QDialog):
                         x_data = idx
                         y_data = series[idx]
                         label = self.headers[col_idx] if self.headers and col_idx < len(self.headers) else f"列{col_idx+1}"
-                        self.show_coord_tooltip(x_data, y_data)
+                        self.show_coord_tooltip(x_data, y_data, event.xdata, event.ydata)
                         break
             elif event.inaxes == self.ax1_state:
                 # 第一个图表的状态变量曲线
@@ -882,7 +916,7 @@ class StatesLookupWindow(QDialog):
                 if on_curve and idx < len(self.state_data):
                     x_data = idx
                     y_data = self.state_data[idx]
-                    self.show_coord_tooltip(x_data, y_data)
+                    self.show_coord_tooltip(x_data, y_data, event.xdata, event.ydata)
             elif event.inaxes == self.ax2_cap:
                 # 获取当前显示的段数据
                 if hasattr(self, 'current_segment_x_range'):
@@ -900,13 +934,13 @@ class StatesLookupWindow(QDialog):
                         y_segment = [series[i] for i in self.current_segment_x_range]
                         on_curve, idx = self.is_click_on_curve(event.xdata, event.ydata,
                                                                self.ax2_cap,
-                                                               list(range(len(y_segment))),
+                                                               self.current_segment_x_range,  # 修复：使用正确的x轴数据
                                                                y_segment)
                         if on_curve and idx < len(self.current_segment_x_range):
                             x_data = self.current_segment_x_range[idx]
                             y_data = series[x_data]
                             label = self.headers[col_idx] if self.headers and col_idx < len(self.headers) else f"列{col_idx+1}"
-                            self.show_coord_tooltip(x_data, y_data)
+                            self.show_coord_tooltip(x_data, y_data, event.xdata, event.ydata)
                             break
             elif event.inaxes == self.ax2_state:
                 # 获取当前显示的段数据
@@ -919,7 +953,7 @@ class StatesLookupWindow(QDialog):
                     if on_curve and idx < len(self.current_segment_x_range):
                         x_data = self.current_segment_x_range[idx]
                         y_data = self.state_data[x_data]
-                        self.show_coord_tooltip(x_data, y_data)
+                        self.show_coord_tooltip(x_data, y_data, event.xdata, event.ydata)
             return
 
     def on_mouse_move(self, event):
@@ -948,6 +982,21 @@ class StatesLookupWindow(QDialog):
             except Exception:
                 pass
 
+            # 同步同一splitter中的另一个图表
+            sync_ax = None
+            if self.pan_ax == self.ax1_cap:
+                sync_ax = self.ax1_state
+            elif self.pan_ax == self.ax1_state:
+                sync_ax = self.ax1_cap
+            elif self.pan_ax == self.ax2_cap:
+                sync_ax = self.ax2_state
+            elif self.pan_ax == self.ax2_state:
+                sync_ax = self.ax2_cap
+
+            # 如果找到需要同步的轴，则同步x轴范围
+            if sync_ax is not None:
+                sync_ax.set_xlim(new_xlim)
+
             # 重绘对应的画布
             try:
                 if self.pan_ax in (self.ax1_cap, self.ax1_state):
@@ -973,6 +1022,10 @@ class StatesLookupWindow(QDialog):
                 self.pan_start_y = None
                 self.pan_orig_xlim = None
                 self.pan_orig_ylim = None
+                
+                # 确保两个canvas都被重绘以保持同步
+                self.canvas1.draw_idle()
+                self.canvas2.draw_idle()
         except Exception:
             pass
     
