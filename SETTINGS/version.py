@@ -4,6 +4,6 @@
 统一管理项目版本号、文件名和图标路径
 """
 
-__version__ = "2.7.0.20250928"
+__version__ = "2.7.1.20251118"
 app_name = f"CSV-DataTools V{__version__}"
 icon_path = "icon/CSV-DataTools.ico"
