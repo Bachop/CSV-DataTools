@@ -10,9 +10,9 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QSizePolicy, QFrame, QApplication, QComboBox,
                              QDialogButtonBox, QAction, QToolButton,
                              QGroupBox, QFileDialog, QStyle, QMenu, QTextEdit,
-                             QLineEdit, QFormLayout)
+                             QLineEdit, QFormLayout, QSpinBox)
 from PyQt5.QtCore import Qt, QEvent
-from PyQt5.QtGui import QFont, QIcon, QKeyEvent
+from PyQt5.QtGui import QFont, QIcon, QKeyEvent, QStandardItemModel, QStandardItem
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -159,6 +159,7 @@ class StatesColumnSelectionDialog(QDialog):
         super().__init__(parent)
         self.column_names = column_names
         self.state_column = None
+        # sensor_column now may be a list of indices
         self.sensor_column = None
         
         self.setWindowTitle("状态变量检测 - 列选择")
@@ -199,18 +200,30 @@ class StatesColumnSelectionDialog(QDialog):
 
         layout.addLayout(state_layout)
         
-        # 传感器值列选择
+        # 传感器值列选择：先输入需要多少个传感器下拉框（n），然后显示 n 个下拉框
         sensor_layout = QHBoxLayout()
-        sensor_label = QLabel("对应传感器值列:")
-        self.sensor_combo = QComboBox()
-        
-        for i, name in enumerate(self.column_names):
-            self.sensor_combo.addItem(f"{name} (列{i+1})")  # 添加列索引备注
+        sensor_count_label = QLabel("传感器列数:")
+        self.sensor_count_spin = QSpinBox()
+        self.sensor_count_spin.setRange(1, max(1, len(self.column_names)))
+        self.sensor_count_spin.setValue(1)
+        self.sensor_count_spin.valueChanged.connect(self._on_sensor_count_changed)
 
-        sensor_layout.addWidget(sensor_label)
-        sensor_layout.addWidget(self.sensor_combo)
+        sensor_layout.addWidget(sensor_count_label)
+        sensor_layout.addWidget(self.sensor_count_spin)
 
         layout.addLayout(sensor_layout)
+
+        # 放置动态下拉框的容器
+        self.sensor_combos_container = QWidget()
+        self.sensor_combos_layout = QHBoxLayout(self.sensor_combos_container)
+        self.sensor_combos_layout.setContentsMargins(0, 0, 0, 0)
+        self.sensor_combos_layout.setSpacing(4)
+        self.sensor_combos = []
+
+        # 初始化一个下拉框
+        self._build_sensor_combos(1)
+
+        layout.addWidget(self.sensor_combos_container)
         
         # 确定/取消按钮
         button_box = QDialogButtonBox(
@@ -222,6 +235,79 @@ class StatesColumnSelectionDialog(QDialog):
         layout.addWidget(button_box)
         
         self.setLayout(layout)
+
+    def _on_sensor_count_changed(self, n):
+        """响应传感器数目变化，重建下拉框"""
+        try:
+            n = int(n)
+        except Exception:
+            return
+        self._build_sensor_combos(n)
+
+    def _build_sensor_combos(self, n):
+        """构建 n 个下拉框并加入到布局中"""
+        # 清理已有
+        for i in reversed(range(self.sensor_combos_layout.count())):
+            w = self.sensor_combos_layout.itemAt(i).widget()
+            if w:
+                w.setParent(None)
+        self.sensor_combos = []
+
+        # 当前已选项（用于禁用）
+        current_selected = []
+        # 保留之前选择
+        try:
+            for c in getattr(self, 'sensor_combos', []):
+                current_selected.append(c.currentIndex())
+        except Exception:
+            current_selected = []
+
+        for i in range(n):
+            combo = QComboBox()
+            combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+            model = QStandardItemModel()
+            # 填充项
+            for idx, name in enumerate(self.column_names):
+                display = f"{name} (列{idx+1})"
+                item = QStandardItem(display)
+                item.setData(idx)
+                model.appendRow(item)
+            combo.setModel(model)
+            # 设定当前索引，如果之前有保存，则尝试恢复
+            if i < len(current_selected) and isinstance(current_selected[i], int) and 0 <= current_selected[i] < len(self.column_names):
+                combo.setCurrentIndex(current_selected[i])
+            else:
+                combo.setCurrentIndex(0)
+
+            combo.currentIndexChanged.connect(self._on_sensor_combo_changed)
+            self.sensor_combos_layout.addWidget(combo)
+            self.sensor_combos.append(combo)
+
+        # 同步禁用已被其他下拉框选中的项
+        self._refresh_combo_models()
+
+    def _on_sensor_combo_changed(self, _):
+        """当任一下拉框值改变时，刷新其它下拉框的可用项（禁用已选项）"""
+        self._refresh_combo_models()
+
+    def _refresh_combo_models(self):
+        """刷新所有下拉框的model，禁用已被其他下拉框选择的项"""
+        selected = [c.currentIndex() for c in self.sensor_combos if c.currentIndex() >= 0]
+        for i, combo in enumerate(self.sensor_combos):
+            model = combo.model()
+            # 遍历model中的项，设置enabled根据是否为其他combo选择
+            for row in range(model.rowCount()):
+                item = model.item(row)
+                if item is None:
+                    continue
+                idx = row
+                # 如果该项在其他combo中被选中，则禁用（但保留自身选中的项可选）
+                other_selected = [s for j, s in enumerate(selected) if j != i]
+                if idx in other_selected:
+                    # 禁用
+                    item.setEnabled(False)
+                else:
+                    item.setEnabled(True)
     
     def set_defaults(self, state_column=None, sensor_column=None):
         """
@@ -239,38 +325,94 @@ class StatesColumnSelectionDialog(QDialog):
                 self.state_combo.setCurrentIndex(index)
         
         if sensor_column is not None:
-            if isinstance(sensor_column, int) and 0 <= sensor_column < self.sensor_combo.count():
-                self.sensor_combo.setCurrentIndex(sensor_column)
-            elif isinstance(sensor_column, str) and sensor_column in self.column_names:
-                index = self.column_names.index(sensor_column)
-                self.sensor_combo.setCurrentIndex(index)
+            # sensor_column can be an int, str or a list of these
+            indices = []
+            if isinstance(sensor_column, (list, tuple)):
+                for sc in sensor_column:
+                    if isinstance(sc, int) and 0 <= sc < len(self.column_names):
+                        indices.append(sc)
+                    elif isinstance(sc, str) and sc in self.column_names:
+                        indices.append(self.column_names.index(sc))
+            else:
+                if isinstance(sensor_column, int) and 0 <= sensor_column < len(self.column_names):
+                    indices = [sensor_column]
+                elif isinstance(sensor_column, str) and sensor_column in self.column_names:
+                    indices = [self.column_names.index(sensor_column)]
+
+            if indices:
+                n = len(indices)
+                self.sensor_count_spin.setValue(n)
+                # 确保下拉框已创建
+                self._build_sensor_combos(n)
+                # 设置每个下拉框的选中项
+                for i, idx in enumerate(indices):
+                    if i < len(self.sensor_combos):
+                        self.sensor_combos[i].setCurrentIndex(idx)
     
     def accept(self):
         """确认选择"""
         self.state_column = self.state_combo.currentIndex()
-        self.sensor_column = self.sensor_combo.currentIndex()
-        
+        # 从动态下拉框中获取选择
+        sensor_indices = []
+        for combo in getattr(self, 'sensor_combos', []):
+            idx = combo.currentIndex()
+            if idx is not None and idx >= 0:
+                sensor_indices.append(idx)
+
+        # 去重并保持顺序
+        seen = set()
+        uniq = []
+        for x in sensor_indices:
+            if x not in seen:
+                seen.add(x)
+                uniq.append(x)
+
+        self.sensor_column = uniq
+
         # 检查是否选择了相同的列
-        if self.state_column == self.sensor_column:
+        if self.state_column in self.sensor_column:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, "警告", "状态变量列和传感器值列不能相同，请重新选择。")
             return
-        
+        if not self.sensor_column:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "警告", "请至少选择一列传感器值。")
+            return
+
         super().accept()
 
 
 class StatesLookupWindow(QDialog):
     """状态变量检测窗口"""
     
-    def __init__(self, data, state_column, capacitor_column, parent=None):
+    def __init__(self, data, state_column, capacitor_columns, parent=None):
         super().__init__(parent)
         self.data = data
         self.state_column = state_column
-        self.capacitor_column = capacitor_column
-        
-        # 获取状态列和电容列的数据
-        self.state_data = [float(row[self.state_column]) for row in self.data[1:] if row[self.state_column]]
-        self.capacitor_data = [float(row[self.capacitor_column]) for row in self.data[1:] if row[self.capacitor_column]]
+        # capacitor_columns 可以是单个索引或列表
+        if isinstance(capacitor_columns, (list, tuple)):
+            self.capacitor_columns = list(capacitor_columns)
+        else:
+            self.capacitor_columns = [capacitor_columns]
+
+        # 保存表头（用于图例显示）
+        self.headers = self.data[0] if self.data and len(self.data) > 0 else []
+
+        # 以状态列有值的行作为基准，保证各序列对齐
+        rows_with_state = [row for row in self.data[1:] if row and row[self.state_column]]
+        self.state_data = [float(row[self.state_column]) for row in rows_with_state]
+
+        # 为每个传感器列构建对齐的数据序列，缺失值用 np.nan 填充
+        self.capacitor_data_list = []
+        for col in self.capacitor_columns:
+            series = []
+            for row in rows_with_state:
+                try:
+                    v = row[col]
+                    series.append(float(v) if v != '' and v is not None else np.nan)
+                except Exception:
+                    series.append(np.nan)
+            self.capacitor_data_list.append(series)
         
         # 分析状态数据，找出连续为1的段
         self.state_segments = self._find_state_segments()
@@ -281,6 +423,8 @@ class StatesLookupWindow(QDialog):
         # 默认左右检测点数
         self.left_points = 30
         self.right_points = 30
+        # 当前选中的传感器列（实际表格列索引）
+        self.selected_curves = set()
         
         # 当前选中的状态段索引
         self.current_segment_index = -1
@@ -468,6 +612,16 @@ class StatesLookupWindow(QDialog):
         self.stats_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         stats_layout.addWidget(self.stats_label)
 
+        # 曲线选择区域（用于多曲线时专注分析）
+        curves_group = QGroupBox("曲线选择")
+        curves_layout = QVBoxLayout(curves_group)
+        curves_layout.setContentsMargins(4, 4, 4, 4)
+        self.curve_buttons_widget = QWidget()
+        self.curve_buttons_layout = QVBoxLayout(self.curve_buttons_widget)
+        self.curve_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        curves_layout.addWidget(self.curve_buttons_widget)
+        right_layout.addWidget(curves_group)
+
         # 添加到右侧布局
         right_layout.addWidget(segment_group)
         right_layout.addWidget(points_group)
@@ -498,6 +652,8 @@ class StatesLookupWindow(QDialog):
         # 在设置完UI后刷新画布
         self.figure1.tight_layout()
         self.figure2.tight_layout()
+        # 创建曲线选择按钮（如果有多个传感器列）
+        self.create_curve_buttons()
     
     def apply_points_settings(self):
         """应用左右检测点数设置"""
@@ -596,15 +752,29 @@ class StatesLookupWindow(QDialog):
         if event.button == 3:  # 右键
             # 判断是哪个图表被点击
             if event.inaxes == self.ax1_cap:
-                # 第一个图表的电容值曲线
-                on_curve, idx = self.is_click_on_curve(event.xdata, event.ydata, 
-                                                       self.ax1_cap, 
-                                                       list(range(len(self.capacitor_data))), 
-                                                       self.capacitor_data)
-                if on_curve and idx < len(self.capacitor_data):
-                    x_data = idx
-                    y_data = self.capacitor_data[idx]
-                    self.show_coord_tooltip(x_data, y_data)
+                # 第一个图表的电容值曲线（支持多列）
+                # 优先检查用户选中的曲线以便专注分析
+                series_order = []
+                # selected curves are stored as actual column indices
+                for si, col_idx in enumerate(self.capacitor_columns):
+                    if col_idx in self.selected_curves:
+                        series_order.append((si, col_idx))
+                for si, col_idx in enumerate(self.capacitor_columns):
+                    if col_idx not in self.selected_curves:
+                        series_order.append((si, col_idx))
+
+                for si, col_idx in series_order:
+                    series = self.capacitor_data_list[si]
+                    on_curve, idx = self.is_click_on_curve(event.xdata, event.ydata,
+                                                           self.ax1_cap,
+                                                           list(range(len(series))),
+                                                           series)
+                    if on_curve and idx < len(series):
+                        x_data = idx
+                        y_data = series[idx]
+                        label = self.headers[col_idx] if self.headers and col_idx < len(self.headers) else f"列{col_idx+1}"
+                        self.show_coord_tooltip(x_data, y_data)
+                        break
             elif event.inaxes == self.ax1_state:
                 # 第一个图表的状态变量曲线
                 on_curve, idx = self.is_click_on_curve(event.xdata, event.ydata, 
@@ -618,15 +788,28 @@ class StatesLookupWindow(QDialog):
             elif event.inaxes == self.ax2_cap:
                 # 获取当前显示的段数据
                 if hasattr(self, 'current_segment_x_range'):
-                    # 第二个图表的电容值曲线
-                    on_curve, idx = self.is_click_on_curve(event.xdata, event.ydata, 
-                                                           self.ax2_cap, 
-                                                           self.current_segment_x_range, 
-                                                           [self.capacitor_data[i] for i in self.current_segment_x_range])
-                    if on_curve and idx < len(self.current_segment_x_range):
-                        x_data = self.current_segment_x_range[idx]
-                        y_data = self.capacitor_data[x_data]
-                        self.show_coord_tooltip(x_data, y_data)
+                    # 第二个图表的电容值曲线（多列），优先选中曲线
+                    series_order = []
+                    for si, col_idx in enumerate(self.capacitor_columns):
+                        if col_idx in self.selected_curves:
+                            series_order.append((si, col_idx))
+                    for si, col_idx in enumerate(self.capacitor_columns):
+                        if col_idx not in self.selected_curves:
+                            series_order.append((si, col_idx))
+
+                    for si, col_idx in series_order:
+                        series = self.capacitor_data_list[si]
+                        y_segment = [series[i] for i in self.current_segment_x_range]
+                        on_curve, idx = self.is_click_on_curve(event.xdata, event.ydata,
+                                                               self.ax2_cap,
+                                                               list(range(len(y_segment))),
+                                                               y_segment)
+                        if on_curve and idx < len(self.current_segment_x_range):
+                            x_data = self.current_segment_x_range[idx]
+                            y_data = series[x_data]
+                            label = self.headers[col_idx] if self.headers and col_idx < len(self.headers) else f"列{col_idx+1}"
+                            self.show_coord_tooltip(x_data, y_data)
+                            break
             elif event.inaxes == self.ax2_state:
                 # 获取当前显示的段数据
                 if hasattr(self, 'current_segment_x_range'):
@@ -709,8 +892,18 @@ class StatesLookupWindow(QDialog):
         self.ax1_cap.clear()
         self.ax1_state.clear()
         
-        # 绘制电容值曲线
-        self.ax1_cap.plot(self.capacitor_data, 'b-', linewidth=1, label='传感器值')
+        # 绘制电容值曲线（多列）
+        for si, series in enumerate(self.capacitor_data_list):
+            col_idx = self.capacitor_columns[si]
+            label = self.headers[col_idx] if self.headers and col_idx < len(self.headers) else f"列{col_idx+1}"
+            # 如果用户选择了专注曲线，则突出显示选中曲线，其他曲线淡化
+            if self.selected_curves:
+                if col_idx in self.selected_curves:
+                    self.ax1_cap.plot(series, linewidth=1.5, label=label)
+                else:
+                    self.ax1_cap.plot(series, linewidth=1, label=label, alpha=0.3)
+            else:
+                self.ax1_cap.plot(series, linewidth=1, label=label)
         self.ax1_cap.set_title("传感器值曲线", fontsize=10)
         self.ax1_cap.set_ylabel("传感器值", fontsize=9)
         self.ax1_cap.grid(True)
@@ -738,6 +931,40 @@ class StatesLookupWindow(QDialog):
         
         if len(self.state_segments) > 0:
             self.ax1_state.legend(fontsize=9)
+
+        # 根据当前可见曲线自适应坐标轴（如果有选中曲线则仅基于选中曲线，否则基于所有曲线）
+        try:
+            # 选择要用于缩放的曲线索引（表格列索引）
+            if self.selected_curves:
+                cols_to_use = [col for col in self.capacitor_columns if col in self.selected_curves]
+            else:
+                cols_to_use = list(self.capacitor_columns)
+
+            all_x = []
+            all_y = []
+            for si, col_idx in enumerate(self.capacitor_columns):
+                if col_idx in cols_to_use:
+                    series = self.capacitor_data_list[si]
+                    x = list(range(len(series)))
+                    y = [v for v in series]
+                    if len(x) > 0 and len(y) > 0:
+                        all_x.extend(x)
+                        # 过滤 nan 值
+                        try:
+                            all_y.extend([v for v in y if not np.isnan(v)])
+                        except Exception:
+                            all_y.extend(y)
+
+            if all_x and all_y:
+                x_min, x_max = min(all_x), max(all_x)
+                y_min, y_max = min(all_y), max(all_y)
+                x_margin = max(1, (x_max - x_min) * 0.05)
+                y_margin = (y_max - y_min) * 0.05 if (y_max - y_min) != 0 else 0.5
+                self.ax1_cap.set_xlim(x_min - x_margin, x_max + x_margin)
+                self.ax1_cap.set_ylim(y_min - y_margin, y_max + y_margin)
+        except Exception:
+            pass
+
         self.canvas1.draw()
     
     def _plot_segment_data(self, segment):
@@ -753,25 +980,35 @@ class StatesLookupWindow(QDialog):
         # 确定实际要显示的点数（使用用户自定义的点数，但不超过实际连续0点数）
         display_points_left = min(self.left_points, left_zeros)
         display_points_right = min(self.right_points, right_zeros)
-        
-        # 计算显示范围
+
+        # 计算显示范围（基于 state_data 的长度，所有序列已按 state 对齐）
         start_idx = max(0, segment["start"] - display_points_left)
-        end_idx = min(len(self.capacitor_data) - 1, segment["end"] + display_points_right)
+        end_idx = min(len(self.state_data) - 1, segment["end"] + display_points_right)
         
         # 提取数据
         x_range = list(range(start_idx, end_idx + 1))
-        cap_values = self.capacitor_data[start_idx:end_idx + 1]
+        cap_values_list = [series[start_idx:end_idx + 1] for series in self.capacitor_data_list]
         state_values = self.state_data[start_idx:end_idx + 1]
         
         # 保存当前显示的x_range，用于鼠标点击检测
         self.current_segment_x_range = x_range
         
-        # 绘制电容值曲线
-        self.ax2_cap.plot(x_range, cap_values, 'b-', linewidth=1, marker='o', markersize=2, label='传感器值')
+        # 绘制电容值曲线（多列）
+        for si, cap_values in enumerate(cap_values_list):
+            col_idx = self.capacitor_columns[si]
+            label = self.headers[col_idx] if self.headers and col_idx < len(self.headers) else f"列{col_idx+1}"
+            # 突出显示选中曲线
+            if self.selected_curves:
+                if col_idx in self.selected_curves:
+                    self.ax2_cap.plot(x_range, cap_values, linewidth=1.5, marker='o', markersize=3, label=label)
+                else:
+                    self.ax2_cap.plot(x_range, cap_values, linewidth=1, marker='o', markersize=2, label=label, alpha=0.3)
+            else:
+                self.ax2_cap.plot(x_range, cap_values, linewidth=1, marker='o', markersize=2, label=label)
         self.ax2_cap.set_title(f"状态段 {self.state_segments.index(segment)+1} 及周边数据 (点 {start_idx} 到 {end_idx})", fontsize=10)
         self.ax2_cap.set_ylabel("传感器值", fontsize=9)
         self.ax2_cap.grid(True)
-        
+
         # 用不同颜色标示状态段
         self.ax2_cap.axvspan(segment["start"], segment["end"], 
                              alpha=0.3, color='yellow', label="选中状态段")
@@ -796,6 +1033,35 @@ class StatesLookupWindow(QDialog):
         # 禁用科学计数法
         self.ax2_state.ticklabel_format(style='plain', axis='y')
         
+        # 自适应坐标轴：基于当前显示的（或选中）曲线调整范围
+        try:
+            # x_range 已是显示的索引
+            if x_range:
+                x_min, x_max = min(x_range), max(x_range)
+                x_margin = max(1, (x_max - x_min) * 0.02)
+                self.ax2_cap.set_xlim(x_min - x_margin, x_max + x_margin)
+
+            # 选取用于缩放的曲线的数据
+            if self.selected_curves:
+                use_indices = [i for i, col in enumerate(self.capacitor_columns) if col in self.selected_curves]
+            else:
+                use_indices = list(range(len(cap_values_list)))
+
+            all_y = []
+            for ui in use_indices:
+                seg = cap_values_list[ui]
+                try:
+                    all_y.extend([v for v in seg if not np.isnan(v)])
+                except Exception:
+                    all_y.extend(seg)
+
+            if all_y:
+                y_min, y_max = min(all_y), max(all_y)
+                y_margin = (y_max - y_min) * 0.05 if (y_max - y_min) != 0 else 0.5
+                self.ax2_cap.set_ylim(y_min - y_margin, y_max + y_margin)
+        except Exception:
+            pass
+
         self.canvas2.draw()
     
     def _count_consecutive_zeros(self, start_idx, end_idx, step):
@@ -822,69 +1088,139 @@ class StatesLookupWindow(QDialog):
     
     def _calculate_and_show_stats(self, segment):
         """计算并显示统计信息"""
-        # 计算状态为1时的统计数据
-        state_1_caps = self.capacitor_data[segment["start"]:segment["end"] + 1]
-        state_1_min = min(state_1_caps)
-        state_1_max = max(state_1_caps)
-        state_1_mean = np.mean(state_1_caps)
-        state_1_pp = state_1_max - state_1_min
-        
-        # 计算左右两侧连续0点的数量
+        # 计算左右两侧连续0点的数量（与绘图一致）
         left_zeros = self._count_consecutive_zeros(segment["start"] - 1, -1, -1)
         right_zeros = self._count_consecutive_zeros(segment["end"] + 1, len(self.state_data), 1)
-        
+
         # 确定实际用于统计的点数（使用用户自定义的点数，但不超过实际连续0点数）
         stat_points_left = min(self.left_points, left_zeros)
         stat_points_right = min(self.right_points, right_zeros)
-        
-        # 计算左边0值时的统计数据
+
+        # 计算左右段的索引范围
         left_start = max(0, segment["start"] - stat_points_left)
         left_end = segment["start"]
-        left_caps = self.capacitor_data[left_start:left_end] if left_end > left_start else []
-        
-        if left_caps:
-            left_min = min(left_caps)
-            left_max = max(left_caps)
-            left_mean = np.mean(left_caps)
-            left_pp = left_max - left_min
-        else:
-            left_min = left_max = left_mean = left_pp = 0
-        
-        # 计算右边0值时的统计数据
         right_start = segment["end"] + 1
-        right_end = min(len(self.capacitor_data), segment["end"] + 1 + stat_points_right)
-        right_caps = self.capacitor_data[right_start:right_end] if right_end > right_start else []
-        
-        if right_caps:
-            right_min = min(right_caps)
-            right_max = max(right_caps)
-            right_mean = np.mean(right_caps)
-            right_pp = right_max - right_min
-        else:
-            right_min = right_max = right_mean = right_pp = 0
-        
-        # 显示统计信息
-        stats_text = f"""<b>状态段信息:</b><br>
-起始点: {segment['start']}<br>
-结束点: {segment['end']}<br>
-段长: {segment['length']}<br><br>
+        right_end = min(len(self.state_data), segment["end"] + 1 + stat_points_right)
 
-<b>连1段:</b><br>
-最小值: {state_1_min:.4f}<br>
-最大值: {state_1_max:.4f}<br>
-均值: {state_1_mean:.4f}<br>
-峰峰值: {state_1_pp:.4f}<br><br>
+        # 为每个传感器列计算统计量，并拼接为HTML
+        sensors_stats = []
+        for si, series in enumerate(self.capacitor_data_list):
+            name = self.headers[self.capacitor_columns[si]] if self.capacitor_columns and si < len(self.capacitor_columns) and self.headers else f"列{self.capacitor_columns[si]+1}"
 
-<b>左侧0段(左侧共{left_zeros}点, 实统计{stat_points_left}点):</b><br>
-最小值: {left_min:.4f}<br>
-最大值: {left_max:.4f}<br>
-均值: {left_mean:.4f}<br>
-峰峰值: {left_pp:.4f}<br><br>
+            # 连1段统计
+            seg_vals = [v for v in series[segment["start"]:segment["end"] + 1] if not np.isnan(v)]
+            if seg_vals:
+                seg_min = min(seg_vals)
+                seg_max = max(seg_vals)
+                seg_mean = np.mean(seg_vals)
+                seg_pp = seg_max - seg_min
+            else:
+                seg_min = seg_max = seg_mean = seg_pp = 0
 
-<b>右侧0段 (右侧共{right_zeros}点, 实统计{stat_points_right}点):</b><br>
-最小值: {right_min:.4f}<br>
-最大值: {right_max:.4f}<br>
-均值: {right_mean:.4f}<br>
-峰峰值: {right_pp:.4f}"""
-        
+            # 左侧0段统计
+            left_vals = [v for v in series[left_start:left_end] if not np.isnan(v)] if left_end > left_start else []
+            if left_vals:
+                left_min = min(left_vals)
+                left_max = max(left_vals)
+                left_mean = np.mean(left_vals)
+                left_pp = left_max - left_min
+            else:
+                left_min = left_max = left_mean = left_pp = 0
+
+            # 右侧0段统计
+            right_vals = [v for v in series[right_start:right_end] if not np.isnan(v)] if right_end > right_start else []
+            if right_vals:
+                right_min = min(right_vals)
+                right_max = max(right_vals)
+                right_mean = np.mean(right_vals)
+                right_pp = right_max - right_min
+            else:
+                right_min = right_max = right_mean = right_pp = 0
+
+            sensors_stats.append({
+                'name': name,
+                'seg_min': seg_min, 'seg_max': seg_max, 'seg_mean': seg_mean, 'seg_pp': seg_pp,
+                'left_min': left_min, 'left_max': left_max, 'left_mean': left_mean, 'left_pp': left_pp,
+                'right_min': right_min, 'right_max': right_max, 'right_mean': right_mean, 'right_pp': right_pp
+            })
+
+        # 拼接统计信息HTML
+        stats_parts = [f"<b>状态段信息:</b><br>起始点: {segment['start']}<br>结束点: {segment['end']}<br>段长: {segment['length']}<br><br>"]
+        for s in sensors_stats:
+            stats_parts.append(f"<b>传感器: {s['name']}</b><br>")
+            stats_parts.append(f"<b>连1段:</b><br>最小值: {s['seg_min']:.4f}<br>最大值: {s['seg_max']:.4f}<br>均值: {s['seg_mean']:.4f}<br>峰峰值: {s['seg_pp']:.4f}<br>")
+            stats_parts.append(f"<b>左侧0段(左侧共{left_zeros}点, 实统计{stat_points_left}点):</b><br>最小值: {s['left_min']:.4f}<br>最大值: {s['left_max']:.4f}<br>均值: {s['left_mean']:.4f}<br>峰峰值: {s['left_pp']:.4f}<br>")
+            stats_parts.append(f"<b>右侧0段(右侧共{right_zeros}点, 实统计{stat_points_right}点):</b><br>最小值: {s['right_min']:.4f}<br>最大值: {s['right_max']:.4f}<br>均值: {s['right_mean']:.4f}<br>峰峰值: {s['right_pp']:.4f}<br><br>")
+
+        stats_text = ''.join(stats_parts)
         self.stats_label.setHtml(stats_text)
+
+    def create_curve_buttons(self):
+        """在右侧区域创建曲线选择按钮，允许用户专注某一条或多条曲线"""
+        # 清理已有按钮布局
+        try:
+            for i in reversed(range(self.curve_buttons_layout.count())):
+                w = self.curve_buttons_layout.itemAt(i).widget()
+                if w:
+                    w.setParent(None)
+        except Exception:
+            pass
+
+        self.curve_buttons = []
+
+        # 全部曲线按钮
+        all_btn = QPushButton("全部曲线")
+        all_btn.clicked.connect(lambda: self.select_curve(None))
+        self.curve_buttons_layout.addWidget(all_btn)
+        self.curve_buttons.append(all_btn)
+
+        # 为每个传感器列创建按钮
+        for si, col_idx in enumerate(self.capacitor_columns):
+            label = self.headers[col_idx] if self.headers and col_idx < len(self.headers) else f"列{col_idx+1}"
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda checked, idx=col_idx: self.select_curve(idx))
+            self.curve_buttons_layout.addWidget(btn)
+            self.curve_buttons.append(btn)
+
+        # 填充
+        self.curve_buttons_layout.addStretch()
+        # 初始状态为全部曲线
+        self.select_curve(None)
+
+    def select_curve(self, curve_idx):
+        """切换曲线选中状态；curve_idx为None表示全部/取消全部"""
+        if curve_idx is None:
+            # 如果当前已经全部选中或未选中，则切换为选中全部
+            if len(self.selected_curves) == 0 or len(self.selected_curves) == len(self.capacitor_columns):
+                # 选中全部
+                self.selected_curves = set(self.capacitor_columns)
+            else:
+                # 否则清空选择（显示所有）
+                self.selected_curves.clear()
+        else:
+            # 切换单列选中状态
+            if curve_idx in self.selected_curves:
+                self.selected_curves.remove(curve_idx)
+            else:
+                self.selected_curves.add(curve_idx)
+
+        # 更新按钮样式
+        for i, btn in enumerate(self.curve_buttons):
+            try:
+                if i == 0:
+                    if len(self.selected_curves) == 0 or len(self.selected_curves) == len(self.capacitor_columns):
+                        btn.setStyleSheet("background-color: lightblue;")
+                    else:
+                        btn.setStyleSheet("")
+                else:
+                    col = self.capacitor_columns[i-1]
+                    if col in self.selected_curves:
+                        btn.setStyleSheet("background-color: lightblue;")
+                    else:
+                        btn.setStyleSheet("")
+            except Exception:
+                pass
+
+        # 重新绘制当前显示段和全图
+        if self.current_segment_index >= 0:
+            self.show_segment(self.current_segment_index)
