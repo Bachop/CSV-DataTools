@@ -625,7 +625,7 @@ class StatesLookupWindow(QDialog):
         # 使用提示标签（鼠标中键平移，滚轮缩放，按 R 复位）
         try:
             from PyQt5.QtWidgets import QLabel
-            self.hint_label = QLabel("提示: 左键拖拽平移，滚轮缩放，按 R 恢复视图")
+            self.hint_label = QLabel("提示: 左键点击拖拽平移，右键点击显示坐标，滚轮进行水平缩放，R 键恢复视图")
             self.hint_label.setWordWrap(True)
             self.hint_label.setStyleSheet('color: gray; font-size: 16px;')
             right_layout.addWidget(self.hint_label)
@@ -768,7 +768,7 @@ class StatesLookupWindow(QDialog):
                 self.coord_tooltip = None
 
     def on_scroll(self, event):
-        """处理滚轮缩放事件：以鼠标指向的点为中心对当前坐标轴进行缩放"""
+        """处理滚轮缩放事件：以鼠标指向的点为中心对当前坐标轴进行水平方向缩放"""
         try:
             ax = event.inaxes
             if ax is None:
@@ -795,7 +795,7 @@ class StatesLookupWindow(QDialog):
                 xdata = (xlim[0] + xlim[1]) / 2.0
                 ydata = (ylim[0] + ylim[1]) / 2.0
 
-            # Compute new limits
+            # Compute new limits (仅在X轴方向进行缩放)
             x_left, x_right = ax.get_xlim()
             y_bottom, y_top = ax.get_ylim()
 
@@ -804,13 +804,10 @@ class StatesLookupWindow(QDialog):
             new_x_left = xdata - new_width_left
             new_x_right = xdata + new_width_right
 
-            new_height_bottom = (ydata - y_bottom) * scale_factor
-            new_height_top = (y_top - ydata) * scale_factor
-            new_y_bottom = ydata - new_height_bottom
-            new_y_top = ydata + new_height_top
-
+            # 保持Y轴范围不变，仅缩放X轴
             ax.set_xlim(new_x_left, new_x_right)
-            ax.set_ylim(new_y_bottom, new_y_top)
+            # 不再修改Y轴范围
+            # ax.set_ylim(new_y_bottom, new_y_top)
 
             # redraw the appropriate canvas
             try:
@@ -926,7 +923,7 @@ class StatesLookupWindow(QDialog):
             return
 
     def on_mouse_move(self, event):
-        """处理鼠标移动事件：用于平移"""
+        """处理鼠标移动事件：用于水平方向平移"""
         try:
             if not getattr(self, 'is_panning', False):
                 return
@@ -938,16 +935,16 @@ class StatesLookupWindow(QDialog):
             if event.xdata is None or event.ydata is None:
                 return
 
-            # 计算偏移（以数据坐标为单位）
+            # 计算偏移（以数据坐标为单位），只考虑X轴方向的移动
             dx = self.pan_start_x - event.xdata
-            dy = self.pan_start_y - event.ydata
+            # dy = self.pan_start_y - event.ydata  # 不再使用Y轴方向的移动
 
             new_xlim = (self.pan_orig_xlim[0] + dx, self.pan_orig_xlim[1] + dx)
-            new_ylim = (self.pan_orig_ylim[0] + dy, self.pan_orig_ylim[1] + dy)
+            # new_ylim = (self.pan_orig_ylim[0] + dy, self.pan_orig_ylim[1] + dy)  # 不再修改Y轴范围
 
             try:
                 self.pan_ax.set_xlim(new_xlim)
-                self.pan_ax.set_ylim(new_ylim)
+                # 不再修改Y轴范围: self.pan_ax.set_ylim(new_ylim)
             except Exception:
                 pass
 
