@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QDialogButtonBox, QAction, QToolButton,
                              QGroupBox, QFileDialog, QStyle, QMenu, QTextEdit,
                              QLineEdit, QFormLayout, QSpinBox)
-from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtCore import Qt, QEvent, QTimer
 from PyQt5.QtGui import QFont, QIcon, QKeyEvent, QStandardItemModel, QStandardItem
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -561,6 +561,13 @@ class StatesLookupWindow(QDialog):
         right_layout.setContentsMargins(3, 3, 3, 3)
         right_layout.setSpacing(5)
 
+        # 使用垂直分割器组织右侧控件，支持用户拖拽调节高度
+        right_splitter = QSplitter(Qt.Vertical)
+        right_splitter.setChildrenCollapsible(False)  # 防止子控件被压缩到不可见
+        
+        # 为每个可折叠的widget创建标题栏，方便在折叠后展开
+        self.create_collapsible_header = lambda title, widget: self._create_collapsible_header(title, widget, right_splitter)
+
         # 状态段选择下拉按钮
         segment_group = QGroupBox("状态段选择")
         segment_layout = QVBoxLayout(segment_group)
@@ -621,7 +628,29 @@ class StatesLookupWindow(QDialog):
         self.curve_buttons_layout = QVBoxLayout(self.curve_buttons_widget)
         self.curve_buttons_layout.setContentsMargins(0, 0, 0, 0)
         curves_layout.addWidget(self.curve_buttons_widget)
-        right_layout.addWidget(curves_group)
+        
+        # 添加到右侧分割器
+        right_splitter.addWidget(curves_group)
+        right_splitter.addWidget(segment_group)
+        right_splitter.addWidget(points_group)
+        right_splitter.addWidget(stats_group)
+        
+        # 为每个widget添加可折叠的标题栏
+        self.curves_header = self.create_collapsible_header("曲线选择", curves_group)
+        self.segment_header = self.create_collapsible_header("状态段选择", segment_group)
+        self.points_header = self.create_collapsible_header("检测点数设置", points_group)
+        self.stats_header = self.create_collapsible_header("状态统计量", stats_group)
+        
+        # 设置分割器的默认大小比例
+        right_splitter.setSizes([30, 30, 30, 300])
+
+        # 将分割器添加到右侧布局
+        right_layout.addWidget(right_splitter)
+        
+        # 添加展开所有按钮
+        expand_all_button = QPushButton("展开所有面板")
+        expand_all_button.clicked.connect(self.expand_all_widgets)
+        right_layout.addWidget(expand_all_button)
 
         # 使用提示标签（鼠标中键平移，滚轮缩放，按 R 复位）
         try:
@@ -632,12 +661,6 @@ class StatesLookupWindow(QDialog):
             right_layout.addWidget(self.hint_label)
         except Exception:
             pass
-
-        # 添加到右侧布局
-        right_layout.addWidget(segment_group)
-        right_layout.addWidget(points_group)
-        right_layout.addWidget(stats_group)
-        right_layout.addStretch()
 
         # 添加到主分割器
         main_splitter.addWidget(left_widget)
@@ -1474,8 +1497,17 @@ class StatesLookupWindow(QDialog):
             self.curve_buttons_layout.addWidget(btn)
             self.curve_buttons.append(btn)
 
-        # 填充
-        self.curve_buttons_layout.addStretch()
+        # 移除addStretch()，改用根据按钮数量设置合适大小
+        # self.curve_buttons_layout.addStretch()
+        
+        # 根据按钮数量设置曲线选择区域的最小高度
+        button_count = len(self.curve_buttons)
+        curves_group = self.curve_buttons_widget.parent()
+        if curves_group:
+            # 每个按钮大约需要30像素高度，加上边距和间距
+            preferred_height = max(100, button_count * 35 + 20)
+            curves_group.setMinimumHeight(preferred_height)
+            
         # 初始状态为全部曲线
         self.select_curve(None)
 
@@ -1516,3 +1548,41 @@ class StatesLookupWindow(QDialog):
         # 重新绘制当前显示段和全图
         if self.current_segment_index >= 0:
             self.show_segment(self.current_segment_index)
+
+    def _create_collapsible_header(self, title, widget, splitter):
+        """创建可折叠widget的标题栏"""
+        header = QPushButton(title)
+        header.setCheckable(True)
+        header.setChecked(True)
+        header.setStyleSheet("""
+            QPushButton {
+                text-align: left;
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                padding: 5px;
+                font-weight: bold;
+            }
+            QPushButton:checked {
+                background-color: #e0e0e0;
+            }
+        """)
+        
+        def toggle_widget(checked):
+            widget.setVisible(checked)
+            if not checked:
+                # 隐藏时调整其他部件大小
+                splitter.setSizes([100, 100, 100, 100])  # 简单重置大小
+                
+        header.toggled.connect(toggle_widget)
+        header.setCursor(Qt.PointingHandCursor)
+        
+        # 将标题栏插入到widget前面
+        splitter.insertWidget(splitter.indexOf(widget), header)
+        return header
+    
+    def expand_all_widgets(self):
+        """展开所有折叠的widget"""
+        self.curves_header.setChecked(True)
+        self.segment_header.setChecked(True)
+        self.points_header.setChecked(True)
+        self.stats_header.setChecked(True)
