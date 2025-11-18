@@ -16,6 +16,7 @@ from PyQt5.QtGui import QFont, QIcon, QKeyEvent, QStandardItemModel, QStandardIt
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+import matplotlib.text
 
 
 class NoArrowLineEdit(QLineEdit):
@@ -1029,6 +1030,16 @@ class StatesLookupWindow(QDialog):
         except Exception:
             pass
     
+    def on_pick_state_segment(self, event):
+        """处理状态段标签点击事件"""
+        # 检查是否点击了文本对象
+        if isinstance(event.artist, matplotlib.text.Text):
+            # 获取文本对象的自定义属性（状态段索引）
+            segment_index = event.artist.get_gid()
+            if segment_index is not None:
+                # 跳转到对应的状态段，但不重置第一个splitter的视图
+                self.show_segment_without_reset(segment_index)
+    
     def keyPressEvent(self, event):
         """处理键盘事件，支持方向键切换状态段"""
         # 确保事件不会被其他控件处理
@@ -1115,6 +1126,49 @@ class StatesLookupWindow(QDialog):
         
         # 计算并显示统计信息
         self._calculate_and_show_stats(segment)
+        
+    def show_segment_without_reset(self, segment_index):
+        """显示指定状态段的数据，但不重置第一个splitter的视图"""
+        if not self.state_segments or segment_index >= len(self.state_segments):
+            return
+            
+        # 保存当前段索引
+        self.current_segment_index = segment_index
+        segment = self.state_segments[segment_index]
+        
+        # 更新下拉按钮文本
+        self.segment_dropdown.setText(f"状态段 {segment_index+1} (连1点数: {segment['length']})")
+        
+        # 更新菜单项的选中状态
+        for i, action in enumerate(self.segment_actions):
+            if i == segment_index:
+                action.setFont(QFont(action.font().family(), action.font().pointSize(), QFont.Bold))
+            else:
+                action.setFont(QFont(action.font().family(), action.font().pointSize(), QFont.Normal))
+        
+        # 保存当前第一个splitter的视图范围
+        cap_xlim = self.ax1_cap.get_xlim()
+        cap_ylim = self.ax1_cap.get_ylim()
+        state_xlim = self.ax1_state.get_xlim()
+        state_ylim = self.ax1_state.get_ylim()
+        
+        # 绘制第一个splitter - 所有数据（但保持原有视图范围）
+        self._plot_all_data()
+        
+        # 恢复第一个splitter的视图范围
+        self.ax1_cap.set_xlim(cap_xlim)
+        self.ax1_cap.set_ylim(cap_ylim)
+        self.ax1_state.set_xlim(state_xlim)
+        self.ax1_state.set_ylim(state_ylim)
+        
+        # 绘制第二个splitter - 当前段及其周边数据
+        self._plot_segment_data(segment)
+        
+        # 计算并显示统计信息
+        self._calculate_and_show_stats(segment)
+        
+        # 重绘第一个splitter以反映变化
+        self.canvas1.draw_idle()
     
     def _plot_all_data(self):
         """绘制所有数据曲线"""
@@ -1143,12 +1197,12 @@ class StatesLookupWindow(QDialog):
         self.ax1_cap.ticklabel_format(style='plain', axis='y')
         
         # 绘制状态变量曲线
-        self.ax1_state.plot(self.state_data, 'r-', linewidth=1, label='状态变量')
+        self.ax1_state.plot(self.state_data, 'r-', linewidth=1)  # 移除label参数
         self.ax1_state.set_title("状态变量曲线", fontsize=10)
         self.ax1_state.set_xlabel("数据点", fontsize=9)
         self.ax1_state.set_ylabel("状态值", fontsize=9)
         self.ax1_state.grid(True)
-        self.ax1_state.legend(fontsize=9)
+        # 移除legend显示
         self.ax1_state.tick_params(labelsize=8)
         # 禁用科学计数法
         self.ax1_state.ticklabel_format(style='plain', axis='y')
@@ -1156,12 +1210,20 @@ class StatesLookupWindow(QDialog):
         # 标注状态段
         for i, segment in enumerate(self.state_segments):
             self.ax1_state.axvspan(segment["start"], segment["end"], 
-                                   alpha=0.3, color='yellow', 
-                                   label=f"状态段{i+1}")
+                                   alpha=0.3, color='yellow')
+            # 在每个状态段中间位置显示状态段编号
+            mid_point = (segment["start"] + segment["end"]) / 2
+            # 在状态值为1的位置显示状态段编号，添加picker属性以支持点击事件
+            text = self.ax1_state.text(mid_point, 0.5, f'状态段{i+1}', 
+                                ha='center', va='center', fontsize=9,
+                                bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.7),
+                                picker=True)
+            # 为文本标签添加自定义属性，存储对应的状态段索引
+            text.set_gid(i)
         
-        if len(self.state_segments) > 0:
-            self.ax1_state.legend(fontsize=9)
-
+        # 连接点击事件处理器
+        self.canvas1.mpl_connect('pick_event', self.on_pick_state_segment)
+        
         # 根据当前可见曲线自适应坐标轴（如果有选中曲线则仅基于选中曲线，否则基于所有曲线）
         try:
             # 选择要用于缩放的曲线索引（表格列索引）
@@ -1248,7 +1310,7 @@ class StatesLookupWindow(QDialog):
         self.ax2_cap.ticklabel_format(style='plain', axis='y')
         
         # 绘制状态变量曲线
-        self.ax2_state.plot(x_range, state_values, 'r-', linewidth=1, marker='o', markersize=2, label='状态变量')
+        self.ax2_state.plot(x_range, state_values, 'r-', linewidth=1, marker='o', markersize=2)  # 移除label参数
         self.ax2_state.set_title("状态变量", fontsize=10)
         self.ax2_state.set_xlabel("数据点", fontsize=9)
         self.ax2_state.set_ylabel("状态值", fontsize=9)
@@ -1257,8 +1319,8 @@ class StatesLookupWindow(QDialog):
         
         # 用不同颜色标示状态段
         self.ax2_state.axvspan(segment["start"], segment["end"], 
-                               alpha=0.3, color='yellow', label="选中状态段")
-        self.ax2_state.legend(fontsize=9)
+                               alpha=0.3, color='yellow')  # 移除label参数
+        # 不再显示legend
         self.ax2_state.tick_params(labelsize=8)
         # 禁用科学计数法
         self.ax2_state.ticklabel_format(style='plain', axis='y')
