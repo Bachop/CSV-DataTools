@@ -1405,17 +1405,95 @@ class StatesLookupWindow(QDialog):
                 
         return count
     
+    def _calculate_stats_for_export(self):
+        """为导出计算所有状态段的统计信息"""
+        all_segments_stats = []
+        
+        # 遍历所有状态段
+        for segment in self.state_segments:
+            # 计算左右两侧连续0点的数量（与绘图一致）
+            left_zeros = self._count_consecutive_zeros(segment["start"] - 1, -1, -1)
+            right_zeros = self._count_consecutive_zeros(segment["end"] + 1, len(self.state_data), 1)
+            
+            # 确定实际用于统计的点数（使用用户自定义的点数，但不超过实际连续0点数）
+            stat_points_left = min(self.left_points, left_zeros)
+            stat_points_right = min(self.right_points, right_zeros)
+            
+            # 计算左右段的索引范围（与绘图保持一致）
+            left_start = max(0, segment["start"] - stat_points_left)
+            left_end = segment["start"]
+            right_start = segment["end"] + 1
+            right_end = min(len(self.state_data), segment["end"] + 1 + stat_points_right)
+            
+            # 为每个传感器列计算统计量
+            sensors_stats = []
+            for si, series in enumerate(self.capacitor_data_list):
+                name = self.headers[self.capacitor_columns[si]] if self.capacitor_columns and si < len(self.capacitor_columns) and self.headers else f"列{self.capacitor_columns[si]+1}"
+                
+                # 连1段统计
+                seg_vals = [v for v in series[segment["start"]:segment["end"] + 1] if not np.isnan(v)]
+                if seg_vals:
+                    seg_min = min(seg_vals)
+                    seg_max = max(seg_vals)
+                    seg_mean = np.mean(seg_vals)
+                    seg_pp = seg_max - seg_min
+                else:
+                    seg_min = seg_max = seg_mean = seg_pp = np.nan
+                
+                # 左侧0段统计
+                left_vals = [v for v in series[left_start:left_end] if not np.isnan(v)] if left_end > left_start else []
+                if left_vals:
+                    left_min = min(left_vals)
+                    left_max = max(left_vals)
+                    left_mean = np.mean(left_vals)
+                    left_pp = left_max - left_min
+                else:
+                    left_min = left_max = left_mean = left_pp = np.nan
+                
+                # 右侧0段统计
+                right_vals = [v for v in series[right_start:right_end] if not np.isnan(v)] if right_end > right_start else []
+                if right_vals:
+                    right_min = min(right_vals)
+                    right_max = max(right_vals)
+                    right_mean = np.mean(right_vals)
+                    right_pp = right_max - right_min
+                else:
+                    right_min = right_max = right_mean = right_pp = np.nan
+                
+                sensors_stats.append({
+                    'name': name,
+                    'seg_min': seg_min, 
+                    'seg_max': seg_max, 
+                    'seg_mean': seg_mean, 
+                    'seg_pp': seg_pp,
+                    'left_min': left_min,
+                    'left_max': left_max,
+                    'left_mean': left_mean,
+                    'left_pp': left_pp,
+                    'right_min': right_min,
+                    'right_max': right_max,
+                    'right_mean': right_mean,
+                    'right_pp': right_pp
+                })
+            
+            all_segments_stats.append({
+                'segment': segment,
+                'sensors_stats': sensors_stats
+            })
+        
+        return all_segments_stats
+    
     def _calculate_and_show_stats(self, segment):
         """计算并显示统计信息"""
         # 计算左右两侧连续0点的数量（与绘图一致）
         left_zeros = self._count_consecutive_zeros(segment["start"] - 1, -1, -1)
         right_zeros = self._count_consecutive_zeros(segment["end"] + 1, len(self.state_data), 1)
 
-        # 确定实际用于统计的点数（使用用户自定义的点数，但不超过实际连续0点数）
+        # 确定实际要显示的点数（使用用户自定义的点数，但不超过实际连续0点数）
         stat_points_left = min(self.left_points, left_zeros)
         stat_points_right = min(self.right_points, right_zeros)
 
-        # 计算左右段的索引范围
+        # 计算左右段的索引范围（与绘图保持一致）
         left_start = max(0, segment["start"] - stat_points_left)
         left_end = segment["start"]
         right_start = segment["end"] + 1
@@ -1434,7 +1512,7 @@ class StatesLookupWindow(QDialog):
                 seg_mean = np.mean(seg_vals)
                 seg_pp = seg_max - seg_min
             else:
-                seg_min = seg_max = seg_mean = seg_pp = 0
+                seg_min = seg_max = seg_mean = seg_pp = np.nan
 
             # 左侧0段统计
             left_vals = [v for v in series[left_start:left_end] if not np.isnan(v)] if left_end > left_start else []
@@ -1444,7 +1522,7 @@ class StatesLookupWindow(QDialog):
                 left_mean = np.mean(left_vals)
                 left_pp = left_max - left_min
             else:
-                left_min = left_max = left_mean = left_pp = 0
+                left_min = left_max = left_mean = left_pp = np.nan
 
             # 右侧0段统计
             right_vals = [v for v in series[right_start:right_end] if not np.isnan(v)] if right_end > right_start else []
@@ -1454,7 +1532,7 @@ class StatesLookupWindow(QDialog):
                 right_mean = np.mean(right_vals)
                 right_pp = right_max - right_min
             else:
-                right_min = right_max = right_mean = right_pp = 0
+                right_min = right_max = right_mean = right_pp = np.nan
 
             sensors_stats.append({
                 'name': name,
@@ -1466,10 +1544,17 @@ class StatesLookupWindow(QDialog):
         # 拼接统计信息HTML
         stats_parts = [f"<b>状态段信息:</b><br>起始点: {segment['start']}<br>结束点: {segment['end']}<br>段长: {segment['length']}<br><br>"]
         for s in sensors_stats:
+            # 格式化数值，处理NaN情况
+            def format_val(val):
+                if np.isnan(val):
+                    return "N/A"
+                else:
+                    return f"{val:.4f}"
+            
             stats_parts.append(f"<b>传感器: {s['name']}</b><br>")
-            stats_parts.append(f"<b>连1段:</b><br>最小值: {s['seg_min']:.4f}<br>最大值: {s['seg_max']:.4f}<br>均值: {s['seg_mean']:.4f}<br>峰峰值: {s['seg_pp']:.4f}<br>")
-            stats_parts.append(f"<b>左侧0段(左侧共{left_zeros}点, 实统计{stat_points_left}点):</b><br>最小值: {s['left_min']:.4f}<br>最大值: {s['left_max']:.4f}<br>均值: {s['left_mean']:.4f}<br>峰峰值: {s['left_pp']:.4f}<br>")
-            stats_parts.append(f"<b>右侧0段(右侧共{right_zeros}点, 实统计{stat_points_right}点):</b><br>最小值: {s['right_min']:.4f}<br>最大值: {s['right_max']:.4f}<br>均值: {s['right_mean']:.4f}<br>峰峰值: {s['right_pp']:.4f}<br><br>")
+            stats_parts.append(f"<b>连1段:</b><br>最小值: {format_val(s['seg_min'])}<br>最大值: {format_val(s['seg_max'])}<br>均值: {format_val(s['seg_mean'])}<br>峰峰值: {format_val(s['seg_pp'])}<br>")
+            stats_parts.append(f"<b>左侧0段(左侧共{left_zeros}点, 实统计{stat_points_left}点):</b><br>最小值: {format_val(s['left_min'])}<br>最大值: {format_val(s['left_max'])}<br>均值: {format_val(s['left_mean'])}<br>峰峰值: {format_val(s['left_pp'])}<br>")
+            stats_parts.append(f"<b>右侧0段(右侧共{right_zeros}点, 实统计{stat_points_right}点):</b><br>最小值: {format_val(s['right_min'])}<br>最大值: {format_val(s['right_max'])}<br>均值: {format_val(s['right_mean'])}<br>峰峰值: {format_val(s['right_pp'])}<br><br>")
 
         stats_text = ''.join(stats_parts)
         self.stats_label.setHtml(stats_text)
@@ -1553,56 +1638,6 @@ class StatesLookupWindow(QDialog):
         if self.current_segment_index >= 0:
             self.show_segment(self.current_segment_index)
 
-    def _calculate_stats_for_export(self):
-        """为导出计算所有状态段的统计信息"""
-        all_segments_stats = []
-        
-        # 遍历所有状态段
-        for segment in self.state_segments:
-            # 计算左右两侧连续0点的数量
-            left_zeros = self._count_consecutive_zeros(segment["start"] - 1, -1, -1)
-            right_zeros = self._count_consecutive_zeros(segment["end"] + 1, len(self.state_data), 1)
-            
-            # 确定实际用于统计的点数（使用用户自定义的点数，但不超过实际连续0点数）
-            stat_points_left = min(self.left_points, left_zeros)
-            stat_points_right = min(self.right_points, right_zeros)
-            
-            # 计算左右段的索引范围
-            left_start = max(0, segment["start"] - stat_points_left)
-            left_end = segment["start"]
-            right_start = segment["end"] + 1
-            right_end = min(len(self.state_data), segment["end"] + 1 + stat_points_right)
-            
-            # 为每个传感器列计算统计量
-            sensors_stats = []
-            for si, series in enumerate(self.capacitor_data_list):
-                name = self.headers[self.capacitor_columns[si]] if self.capacitor_columns and si < len(self.capacitor_columns) and self.headers else f"列{self.capacitor_columns[si]+1}"
-                
-                # 连1段统计
-                seg_vals = [v for v in series[segment["start"]:segment["end"] + 1] if not np.isnan(v)]
-                if seg_vals:
-                    seg_min = min(seg_vals)
-                    seg_max = max(seg_vals)
-                    seg_mean = np.mean(seg_vals)
-                    seg_pp = seg_max - seg_min
-                else:
-                    seg_min = seg_max = seg_mean = seg_pp = 0
-                
-                sensors_stats.append({
-                    'name': name,
-                    'seg_min': seg_min, 
-                    'seg_max': seg_max, 
-                    'seg_mean': seg_mean, 
-                    'seg_pp': seg_pp
-                })
-            
-            all_segments_stats.append({
-                'segment': segment,
-                'sensors_stats': sensors_stats
-            })
-        
-        return all_segments_stats
-
     def save_stats_to_excel(self):
         """将统计量保存到Excel文件"""
         if not XLSX_AVAILABLE:
@@ -1631,48 +1666,88 @@ class StatesLookupWindow(QDialog):
         num_sensors = len(sensor_names)
         
         # 写入表头
-        # 第一行：传感器名，每4列合并一个单元格
+        # 第一行：传感器名，每12列合并一个单元格（左侧0段4列 + 连1段4列 + 右侧0段4列）
         col_index = 1
         for sensor_name in sensor_names:
             start_col = col_index
-            end_col = col_index + 3
+            end_col = col_index + 11
             # 合并单元格并写入传感器名
             ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
             cell = ws.cell(row=1, column=start_col, value=sensor_name)
             cell.alignment = Alignment(horizontal="center", vertical="center")
             cell.font = Font(bold=True)
-            col_index += 5  # 4列数据 + 1列间隙
+            col_index += 13  # 12列数据 + 1列间隙
         
-        # 第二行：最小值、最大值、均值、峰峰值
+        # 第二行：左侧0段，连1段，右侧0段（每个段落4列）
+        col_index = 1
+        segment_labels = ['左侧0段', '连1段', '右侧0段']
+        for _ in sensor_names:
+            for segment_label in segment_labels:
+                start_col = col_index
+                end_col = col_index + 3
+                ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
+                cell = ws.cell(row=2, column=start_col, value=segment_label)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.font = Font(bold=True)
+                col_index += 4
+            col_index += 1  # 间隙列
+            
+        # 第三行：最小值、最大值、均值、峰峰值
         col_index = 1
         for _ in sensor_names:
-            headers = ['最小值', '最大值', '均值', '峰峰值']
-            for i, header in enumerate(headers):
-                cell = ws.cell(row=2, column=col_index + i, value=header)
-                cell.alignment = Alignment(horizontal="center")
-                cell.font = Font(bold=True)
-            col_index += 5  # 4列数据 + 1列间隙
+            # 对于每个段落（左侧0段、连1段、右侧0段）
+            for _ in range(3):
+                headers = ['最小值', '最大值', '均值', '峰峰值']
+                for i, header in enumerate(headers):
+                    cell = ws.cell(row=3, column=col_index + i, value=header)
+                    cell.alignment = Alignment(horizontal="center")
+                    cell.font = Font(bold=True)
+                col_index += 4
+            col_index += 1  # 间隙列
         
-        # 从第三行开始写入数据：每个状态段一行
-        for row_index, segment_data in enumerate(all_segments_stats, start=3):
+        # 从第四行开始写入数据：每个状态段一行
+        for row_index, segment_data in enumerate(all_segments_stats, start=4):
             col_index = 1
             for sensor_stat in segment_data['sensors_stats']:
-                # 写入该传感器在该状态段的4个统计值
-                stats_values = [
-                    sensor_stat['seg_min'],
-                    sensor_stat['seg_max'],
-                    sensor_stat['seg_mean'],
-                    sensor_stat['seg_pp']
+                # 写入该传感器在左侧0段的4个统计值
+                left_stats_values = [
+                    sensor_stat.get('left_min', np.nan),
+                    sensor_stat.get('left_max', np.nan),
+                    sensor_stat.get('left_mean', np.nan),
+                    sensor_stat.get('left_pp', np.nan)
                 ]
                 
-                for i, value in enumerate(stats_values):
-                    cell = ws.cell(row=row_index, column=col_index + i, value=value)
-                    cell.number_format = '0.0000'  # 设置数字格式
+                # 写入该传感器在连1段的4个统计值
+                seg_stats_values = [
+                    sensor_stat.get('seg_min', np.nan),
+                    sensor_stat.get('seg_max', np.nan),
+                    sensor_stat.get('seg_mean', np.nan),
+                    sensor_stat.get('seg_pp', np.nan)
+                ]
                 
-                col_index += 5  # 4列数据 + 1列间隙
+                # 写入该传感器在右侧0段的4个统计值
+                right_stats_values = [
+                    sensor_stat.get('right_min', np.nan),
+                    sensor_stat.get('right_max', np.nan),
+                    sensor_stat.get('right_mean', np.nan),
+                    sensor_stat.get('right_pp', np.nan)
+                ]
+                
+                # 写入所有值
+                all_values = left_stats_values + seg_stats_values + right_stats_values
+                for i, value in enumerate(all_values):
+                    # 处理NaN值
+                    if np.isnan(value):
+                        cell = ws.cell(row=row_index, column=col_index + i, value="N/A")
+                    else:
+                        cell = ws.cell(row=row_index, column=col_index + i, value=value)
+                        cell.number_format = '0.0000'  # 设置数字格式
+
+                
+                col_index += 13  # 12列数据 + 1列间隙
         
         # 设置列宽
-        for col_index in range(1, num_sensors * 5):
+        for col_index in range(1, num_sensors * 13):
             ws.column_dimensions[get_column_letter(col_index)].width = 12
         
         # 确定文件保存路径
@@ -1703,129 +1778,3 @@ class StatesLookupWindow(QDialog):
         except Exception as e:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.critical(self, "保存失败", f"保存文件时出错:\n{str(e)}")
-
-import os
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font
-from openpyxl.utils import get_column_letter
-
-from SETTINGS.paths import get_log_directory, ensure_directory_exists
-
-XLSX_AVAILABLE = True
-try:
-    from openpyxl import Workbook
-except ImportError:
-    XLSX_AVAILABLE = False
-
-
-class StatisticsExporter:
-    def __init__(self, original_file_path=None):
-        self.original_file_path = original_file_path
-
-    def _calculate_stats_for_export(self):
-        """计算并返回用于导出的统计信息"""
-        # 这里需要实现具体的统计计算逻辑
-        # 返回一个包含所有状态段统计信息的列表
-        return []
-
-    def save_stats_to_excel(self):
-        """将统计量保存到Excel文件"""
-        if not XLSX_AVAILABLE:
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "功能不可用", "缺少openpyxl库，无法保存Excel文件。")
-            return
-        
-        # 获取统计信息
-        all_segments_stats = self._calculate_stats_for_export()
-        
-        if not all_segments_stats:
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.information(self, "无数据", "没有状态段数据可供导出。")
-            return
-        
-        # 创建工作簿
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "状态统计量"
-        
-        # 获取传感器名称列表
-        sensor_names = []
-        if all_segments_stats:
-            sensor_names = [stat['name'] for stat in all_segments_stats[0]['sensors_stats']]
-        
-        num_sensors = len(sensor_names)
-        
-        # 写入表头
-        # 第一行：传感器名，每4列合并一个单元格
-        col_index = 1
-        for sensor_name in sensor_names:
-            start_col = col_index
-            end_col = col_index + 3
-            # 合并单元格并写入传感器名
-            ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
-            cell = ws.cell(row=1, column=start_col, value=sensor_name)
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.font = Font(bold=True)
-            col_index += 5  # 4列数据 + 1列间隙
-        
-        # 第二行：最小值、最大值、均值、峰峰值
-        col_index = 1
-        for _ in sensor_names:
-            headers = ['最小值', '最大值', '均值', '峰峰值']
-            for i, header in enumerate(headers):
-                cell = ws.cell(row=2, column=col_index + i, value=header)
-                cell.alignment = Alignment(horizontal="center")
-                cell.font = Font(bold=True)
-            col_index += 5  # 4列数据 + 1列间隙
-        
-        # 从第三行开始写入数据：每个状态段一行
-        for row_index, segment_data in enumerate(all_segments_stats, start=3):
-            col_index = 1
-            for sensor_stat in segment_data['sensors_stats']:
-                # 写入该传感器在该状态段的4个统计值
-                stats_values = [
-                    sensor_stat['seg_min'],
-                    sensor_stat['seg_max'],
-                    sensor_stat['seg_mean'],
-                    sensor_stat['seg_pp']
-                ]
-                
-                for i, value in enumerate(stats_values):
-                    cell = ws.cell(row=row_index, column=col_index + i, value=value)
-                    cell.number_format = '0.0000'  # 设置数字格式
-                
-                col_index += 5  # 4列数据 + 1列间隙
-        
-        # 设置列宽
-        for col_index in range(1, num_sensors * 5):
-            ws.column_dimensions[get_column_letter(col_index)].width = 12
-        
-        # 确定文件保存路径
-        from SETTINGS.paths import get_log_directory, ensure_directory_exists
-        import os
-        
-        # 确保Log目录存在
-        log_dir = get_log_directory()
-        ensure_directory_exists(log_dir)
-        
-        # 生成文件名
-        if self.original_file_path:
-            # 基于原始文件名生成Excel文件名
-            original_filename = os.path.basename(self.original_file_path)
-            name_without_ext, _ = os.path.splitext(original_filename)
-            excel_filename = f"{name_without_ext}状态变量检测.xlsx"
-        else:
-            # 默认文件名
-            excel_filename = "状态变量检测.xlsx"
-        
-        # 完整文件路径
-        file_path = os.path.join(log_dir, excel_filename)
-        
-        try:
-            wb.save(file_path)
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.information(self, "保存成功", f"统计量已保存到:\n{file_path}")
-        except Exception as e:
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "保存失败", f"保存文件时出错:\n{str(e)}")
-
