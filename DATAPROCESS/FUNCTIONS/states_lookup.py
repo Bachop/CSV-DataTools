@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QSizePolicy, QFrame, QApplication, QComboBox,
                              QDialogButtonBox, QAction, QToolButton,
                              QGroupBox, QFileDialog, QStyle, QMenu, QTextEdit,
-                             QLineEdit, QFormLayout, QSpinBox)
+                             QLineEdit, QFormLayout, QSpinBox, QDialog)
 from PyQt5.QtCore import Qt, QEvent, QTimer
 from PyQt5.QtGui import QFont, QIcon, QKeyEvent, QStandardItemModel, QStandardItem
 
@@ -1802,10 +1802,99 @@ class StatesLookupWindow(QDialog):
         # 完整文件路径
         file_path = os.path.join(log_dir, excel_filename)
         
+        # 处理重名文件
+        if os.path.exists(file_path):
+            name_without_ext, ext = os.path.splitext(excel_filename)
+            counter = 1
+            while os.path.exists(os.path.join(log_dir, f"{name_without_ext}({counter}){ext}")):
+                counter += 1
+            excel_filename = f"{name_without_ext}({counter}){ext}"
+            file_path = os.path.join(log_dir, excel_filename)
+        
         try:
             wb.save(file_path)
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.information(self, "保存成功", f"统计量已保存到:\n{file_path}")
+            from PyQt5.QtWidgets import QHBoxLayout, QPushButton, QLabel, QVBoxLayout, QDialog, QStyle
+            from PyQt5.QtCore import Qt
+            
+            # 创建自定义对话框
+            msg_box = QDialog(self)
+            msg_box.setWindowTitle("保存成功")
+            msg_box.setModal(True)
+            msg_box.resize(500, 200)
+            
+            # 创建主布局
+            layout = QVBoxLayout(msg_box)
+            layout.setSpacing(15)
+            layout.setContentsMargins(20, 20, 20, 20)
+            
+            # 创建内容布局（图标+文本）
+            content_layout = QHBoxLayout()
+            content_layout.setSpacing(10)
+            
+            # 添加信息图标
+            icon_label = QLabel()
+            icon = msg_box.style().standardIcon(QStyle.SP_MessageBoxInformation)
+            icon_label.setPixmap(icon.pixmap(32, 32))
+            content_layout.addWidget(icon_label)
+            
+            # 添加文本信息
+            from PyQt5.QtGui import QFont
+
+            text_label = QLabel(f"统计量已保存到:\n{file_path}")
+            text_label.setWordWrap(True)
+            content_layout.addWidget(text_label)
+            content_layout.addStretch()
+            
+            layout.addLayout(content_layout)
+            
+            # 创建按钮布局
+            button_layout = QHBoxLayout()
+            button_layout.setContentsMargins(10, 0, 10, 0)
+            
+            # 左侧按钮 - 打开目录
+            open_dir_btn = QPushButton("打开Log目录")
+            
+            # 右侧按钮 - 确定
+            ok_btn = QPushButton("确定")
+            ok_btn.setDefault(True)
+            
+            # 添加按钮到布局
+            button_layout.addWidget(open_dir_btn)
+            button_layout.addStretch()
+            button_layout.addWidget(ok_btn)
+            
+            layout.addLayout(button_layout)
+            
+            # 连接按钮信号
+            open_dir_btn.clicked.connect(lambda: (msg_box.accept(), self._open_file_location(file_path)))
+            ok_btn.clicked.connect(msg_box.accept)
+            
+            msg_box.exec_()
         except Exception as e:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.critical(self, "保存失败", f"保存文件时出错:\n{str(e)}")
+
+    def _open_file_location(self, file_path):
+        """
+        打开文件所在目录并选中文件
+        """
+        import platform
+        import subprocess
+        import os
+        
+        try:
+            system = platform.system()
+            if system == "Windows":
+                # Windows系统使用explorer命令选中文件
+                subprocess.Popen(f'explorer /select,"{os.path.normpath(file_path)}"', shell=True)
+            elif system == "Darwin":  # macOS
+                # macOS使用open命令
+                subprocess.Popen(["open", "-R", file_path])
+            else:  # Linux
+                # Linux打开目录即可
+                directory = os.path.dirname(file_path)
+                subprocess.Popen(["xdg-open", directory])
+        except Exception as e:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "打开目录失败", f"无法打开文件所在目录:\n{str(e)}")
+
