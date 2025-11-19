@@ -1666,33 +1666,59 @@ class StatesLookupWindow(QDialog):
         num_sensors = len(sensor_names)
         
         # 写入表头
-        # 第一行：传感器名，每12列合并一个单元格（左侧0段4列 + 连1段4列 + 右侧0段4列）
+        # 第一行：传感器名，每15列合并一个单元格（左侧0段4列 + 1列空隙 + 连1段4列 + 1列空隙 + 右侧0段4列）
         col_index = 1
         for sensor_name in sensor_names:
             start_col = col_index
-            end_col = col_index + 11
+            end_col = col_index + 13  # 15列（4+1+4+1+4）
             # 合并单元格并写入传感器名
             ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
             cell = ws.cell(row=1, column=start_col, value=sensor_name)
             cell.alignment = Alignment(horizontal="center", vertical="center")
             cell.font = Font(bold=True)
-            col_index += 13  # 12列数据 + 1列间隙
+            col_index += 15  # 12列数据 + 3列间隙
         
-        # 第二行：左侧0段，连1段，右侧0段（每个段落4列）
+        # 第二行：左侧0段，连1段，右侧0段（每个段落4列，段落间增加1列空隙）
         col_index = 1
         segment_labels = ['左侧0段', '连1段', '右侧0段']
         for _ in sensor_names:
-            for segment_label in segment_labels:
-                start_col = col_index
-                end_col = col_index + 3
-                ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
-                cell = ws.cell(row=2, column=start_col, value=segment_label)
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-                cell.font = Font(bold=True)
-                col_index += 4
-            col_index += 1  # 间隙列
+            # 左侧0段
+            start_col = col_index
+            end_col = col_index + 3
+            ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
+            cell = ws.cell(row=2, column=start_col, value=segment_labels[0])
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = Font(bold=True)
+            col_index += 4
             
-        # 第三行：最小值、最大值、均值、峰峰值
+            # 添加空列
+            col_index += 1
+            
+            # 连1段
+            start_col = col_index
+            end_col = col_index + 3
+            ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
+            cell = ws.cell(row=2, column=start_col, value=segment_labels[1])
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = Font(bold=True)
+            col_index += 4
+            
+            # 添加空列
+            col_index += 1
+            
+            # 右侧0段
+            start_col = col_index
+            end_col = col_index + 3
+            ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
+            cell = ws.cell(row=2, column=start_col, value=segment_labels[2])
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = Font(bold=True)
+            col_index += 4
+            
+            # 传感器之间的间隙列
+            col_index += 1
+            
+        # 第三行：最小值、最大值、均值、峰峰值（每个段落4列，段落间增加1列空隙）
         col_index = 1
         for _ in sensor_names:
             # 对于每个段落（左侧0段、连1段、右侧0段）
@@ -1703,8 +1729,11 @@ class StatesLookupWindow(QDialog):
                     cell.alignment = Alignment(horizontal="center")
                     cell.font = Font(bold=True)
                 col_index += 4
-            col_index += 1  # 间隙列
-        
+                # 每个段落后添加空列，除了最后一个段落
+                if _ < 2:
+                    col_index += 1
+            col_index += 1  # 传感器之间的间隙列
+            
         # 从第四行开始写入数据：每个状态段一行
         for row_index, segment_data in enumerate(all_segments_stats, start=4):
             col_index = 1
@@ -1733,21 +1762,23 @@ class StatesLookupWindow(QDialog):
                     sensor_stat.get('right_pp', np.nan)
                 ]
                 
-                # 写入所有值
-                all_values = left_stats_values + seg_stats_values + right_stats_values
+                # 写入所有值，注意在段落之间添加空列
+                all_values = left_stats_values + [''] + seg_stats_values + [''] + right_stats_values
                 for i, value in enumerate(all_values):
                     # 处理NaN值
-                    if np.isnan(value):
+                    if value == '':
+                        # 空列不需要特殊处理
+                        ws.cell(row=row_index, column=col_index + i, value='')
+                    elif np.isnan(value):
                         cell = ws.cell(row=row_index, column=col_index + i, value="N/A")
                     else:
                         cell = ws.cell(row=row_index, column=col_index + i, value=value)
-                        cell.number_format = '0.0000'  # 设置数字格式
+                        cell.number_format = '0.00'  # 设置数字格式
 
-                
-                col_index += 13  # 12列数据 + 1列间隙
+                col_index += 15  # 修改为16，因为现在总共有12列数据 + 3列间隙
         
         # 设置列宽
-        for col_index in range(1, num_sensors * 13):
+        for col_index in range(1, num_sensors * 15):  # 修改为16
             ws.column_dimensions[get_column_letter(col_index)].width = 12
         
         # 确定文件保存路径
@@ -1763,7 +1794,7 @@ class StatesLookupWindow(QDialog):
             # 基于原始文件名生成Excel文件名
             original_filename = os.path.basename(self.original_file_path)
             name_without_ext, _ = os.path.splitext(original_filename)
-            excel_filename = f"{name_without_ext}状态变量检测.xlsx"
+            excel_filename = f"{name_without_ext}-状态变量检测.xlsx"
         else:
             # 默认文件名
             excel_filename = "状态变量检测.xlsx"
