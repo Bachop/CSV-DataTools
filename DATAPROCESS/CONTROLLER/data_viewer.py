@@ -829,9 +829,9 @@ class DataViewer(QDialog):
                     row_data.append(item.text() if item else "")
                 data.append(row_data)
             
-            # 创建并显示状态变量检测窗口
+            # 创建并显示状态变量检测窗口，传递原始文件路径
             try:
-                states_window = StatesLookupWindow(data, state_column, sensor_column, self)
+                states_window = StatesLookupWindow(data, state_column, sensor_column, self, self.file_path)
                 states_window.show()
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"无法创建状态变量检测窗口: {str(e)}")

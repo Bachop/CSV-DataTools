@@ -18,6 +18,16 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.text
 
+# 添加openpyxl导入
+try:
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+    XLSX_AVAILABLE = True
+except ImportError:
+    XLSX_AVAILABLE = False
+    Workbook = None
+
 
 class NoArrowLineEdit(QLineEdit):
     """自定义LineEdit，防止方向键事件被拦截"""
@@ -382,11 +392,10 @@ class StatesColumnSelectionDialog(QDialog):
 
         super().accept()
 
-
 class StatesLookupWindow(QDialog):
     """状态变量检测窗口"""
     
-    def __init__(self, data, state_column, capacitor_columns, parent=None):
+    def __init__(self, data, state_column, capacitor_columns, parent=None, original_file_path=None):
         super().__init__(parent)
         self.data = data
         self.state_column = state_column
@@ -429,6 +438,9 @@ class StatesLookupWindow(QDialog):
         
         # 当前选中的状态段索引
         self.current_segment_index = -1
+        
+        # 保存原始文件路径，用于生成Excel文件名
+        self.original_file_path = original_file_path
         
         self.setWindowTitle("状态变量检测")
         self.resize(1600, 900)  # 调整默认大小以适应不同分辨率
@@ -565,9 +577,6 @@ class StatesLookupWindow(QDialog):
         right_splitter = QSplitter(Qt.Vertical)
         right_splitter.setChildrenCollapsible(False)  # 防止子控件被压缩到不可见
         
-        # 为每个可折叠的widget创建标题栏，方便在折叠后展开
-        self.create_collapsible_header = lambda title, widget: self._create_collapsible_header(title, widget, right_splitter)
-
         # 状态段选择下拉按钮
         segment_group = QGroupBox("状态段选择")
         segment_layout = QVBoxLayout(segment_group)
@@ -603,6 +612,12 @@ class StatesLookupWindow(QDialog):
         points_layout.addRow("左侧检测点数:", self.left_points_edit)
         points_layout.addRow("右侧检测点数:", self.right_points_edit)
         
+        # 添加保存Excel按钮
+        if XLSX_AVAILABLE:
+            save_excel_button = QPushButton("保存统计量到Excel")
+            save_excel_button.clicked.connect(self.save_stats_to_excel)
+            points_layout.addRow(save_excel_button)
+        
         # 添加应用按钮
         apply_button = QPushButton("应用设置")
         apply_button.clicked.connect(self.apply_points_settings)
@@ -635,23 +650,12 @@ class StatesLookupWindow(QDialog):
         right_splitter.addWidget(points_group)
         right_splitter.addWidget(stats_group)
         
-        # 为每个widget添加可折叠的标题栏
-        self.curves_header = self.create_collapsible_header("曲线选择", curves_group)
-        self.segment_header = self.create_collapsible_header("状态段选择", segment_group)
-        self.points_header = self.create_collapsible_header("检测点数设置", points_group)
-        self.stats_header = self.create_collapsible_header("状态统计量", stats_group)
-        
         # 设置分割器的默认大小比例
         right_splitter.setSizes([30, 30, 30, 300])
 
         # 将分割器添加到右侧布局
         right_layout.addWidget(right_splitter)
         
-        # 添加展开所有按钮
-        expand_all_button = QPushButton("展开所有面板")
-        expand_all_button.clicked.connect(self.expand_all_widgets)
-        right_layout.addWidget(expand_all_button)
-
         # 使用提示标签（鼠标中键平移，滚轮缩放，按 R 复位）
         try:
             from PyQt5.QtWidgets import QLabel
@@ -1549,40 +1553,279 @@ class StatesLookupWindow(QDialog):
         if self.current_segment_index >= 0:
             self.show_segment(self.current_segment_index)
 
-    def _create_collapsible_header(self, title, widget, splitter):
-        """创建可折叠widget的标题栏"""
-        header = QPushButton(title)
-        header.setCheckable(True)
-        header.setChecked(True)
-        header.setStyleSheet("""
-            QPushButton {
-                text-align: left;
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                padding: 5px;
-                font-weight: bold;
-            }
-            QPushButton:checked {
-                background-color: #e0e0e0;
-            }
-        """)
+    def _calculate_stats_for_export(self):
+        """为导出计算所有状态段的统计信息"""
+        all_segments_stats = []
         
-        def toggle_widget(checked):
-            widget.setVisible(checked)
-            if not checked:
-                # 隐藏时调整其他部件大小
-                splitter.setSizes([100, 100, 100, 100])  # 简单重置大小
+        # 遍历所有状态段
+        for segment in self.state_segments:
+            # 计算左右两侧连续0点的数量
+            left_zeros = self._count_consecutive_zeros(segment["start"] - 1, -1, -1)
+            right_zeros = self._count_consecutive_zeros(segment["end"] + 1, len(self.state_data), 1)
+            
+            # 确定实际用于统计的点数（使用用户自定义的点数，但不超过实际连续0点数）
+            stat_points_left = min(self.left_points, left_zeros)
+            stat_points_right = min(self.right_points, right_zeros)
+            
+            # 计算左右段的索引范围
+            left_start = max(0, segment["start"] - stat_points_left)
+            left_end = segment["start"]
+            right_start = segment["end"] + 1
+            right_end = min(len(self.state_data), segment["end"] + 1 + stat_points_right)
+            
+            # 为每个传感器列计算统计量
+            sensors_stats = []
+            for si, series in enumerate(self.capacitor_data_list):
+                name = self.headers[self.capacitor_columns[si]] if self.capacitor_columns and si < len(self.capacitor_columns) and self.headers else f"列{self.capacitor_columns[si]+1}"
                 
-        header.toggled.connect(toggle_widget)
-        header.setCursor(Qt.PointingHandCursor)
+                # 连1段统计
+                seg_vals = [v for v in series[segment["start"]:segment["end"] + 1] if not np.isnan(v)]
+                if seg_vals:
+                    seg_min = min(seg_vals)
+                    seg_max = max(seg_vals)
+                    seg_mean = np.mean(seg_vals)
+                    seg_pp = seg_max - seg_min
+                else:
+                    seg_min = seg_max = seg_mean = seg_pp = 0
+                
+                sensors_stats.append({
+                    'name': name,
+                    'seg_min': seg_min, 
+                    'seg_max': seg_max, 
+                    'seg_mean': seg_mean, 
+                    'seg_pp': seg_pp
+                })
+            
+            all_segments_stats.append({
+                'segment': segment,
+                'sensors_stats': sensors_stats
+            })
         
-        # 将标题栏插入到widget前面
-        splitter.insertWidget(splitter.indexOf(widget), header)
-        return header
-    
-    def expand_all_widgets(self):
-        """展开所有折叠的widget"""
-        self.curves_header.setChecked(True)
-        self.segment_header.setChecked(True)
-        self.points_header.setChecked(True)
-        self.stats_header.setChecked(True)
+        return all_segments_stats
+
+    def save_stats_to_excel(self):
+        """将统计量保存到Excel文件"""
+        if not XLSX_AVAILABLE:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "功能不可用", "缺少openpyxl库，无法保存Excel文件。")
+            return
+        
+        # 获取统计信息
+        all_segments_stats = self._calculate_stats_for_export()
+        
+        if not all_segments_stats:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.information(self, "无数据", "没有状态段数据可供导出。")
+            return
+        
+        # 创建工作簿
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "状态统计量"
+        
+        # 获取传感器名称列表
+        sensor_names = []
+        if all_segments_stats:
+            sensor_names = [stat['name'] for stat in all_segments_stats[0]['sensors_stats']]
+        
+        num_sensors = len(sensor_names)
+        
+        # 写入表头
+        # 第一行：传感器名，每4列合并一个单元格
+        col_index = 1
+        for sensor_name in sensor_names:
+            start_col = col_index
+            end_col = col_index + 3
+            # 合并单元格并写入传感器名
+            ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
+            cell = ws.cell(row=1, column=start_col, value=sensor_name)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = Font(bold=True)
+            col_index += 5  # 4列数据 + 1列间隙
+        
+        # 第二行：最小值、最大值、均值、峰峰值
+        col_index = 1
+        for _ in sensor_names:
+            headers = ['最小值', '最大值', '均值', '峰峰值']
+            for i, header in enumerate(headers):
+                cell = ws.cell(row=2, column=col_index + i, value=header)
+                cell.alignment = Alignment(horizontal="center")
+                cell.font = Font(bold=True)
+            col_index += 5  # 4列数据 + 1列间隙
+        
+        # 从第三行开始写入数据：每个状态段一行
+        for row_index, segment_data in enumerate(all_segments_stats, start=3):
+            col_index = 1
+            for sensor_stat in segment_data['sensors_stats']:
+                # 写入该传感器在该状态段的4个统计值
+                stats_values = [
+                    sensor_stat['seg_min'],
+                    sensor_stat['seg_max'],
+                    sensor_stat['seg_mean'],
+                    sensor_stat['seg_pp']
+                ]
+                
+                for i, value in enumerate(stats_values):
+                    cell = ws.cell(row=row_index, column=col_index + i, value=value)
+                    cell.number_format = '0.0000'  # 设置数字格式
+                
+                col_index += 5  # 4列数据 + 1列间隙
+        
+        # 设置列宽
+        for col_index in range(1, num_sensors * 5):
+            ws.column_dimensions[get_column_letter(col_index)].width = 12
+        
+        # 确定文件保存路径
+        from SETTINGS.paths import get_log_directory, ensure_directory_exists
+        import os
+        
+        # 确保Log目录存在
+        log_dir = get_log_directory()
+        ensure_directory_exists(log_dir)
+        
+        # 生成文件名
+        if self.original_file_path:
+            # 基于原始文件名生成Excel文件名
+            original_filename = os.path.basename(self.original_file_path)
+            name_without_ext, _ = os.path.splitext(original_filename)
+            excel_filename = f"{name_without_ext}状态变量检测.xlsx"
+        else:
+            # 默认文件名
+            excel_filename = "状态变量检测.xlsx"
+        
+        # 完整文件路径
+        file_path = os.path.join(log_dir, excel_filename)
+        
+        try:
+            wb.save(file_path)
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.information(self, "保存成功", f"统计量已保存到:\n{file_path}")
+        except Exception as e:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "保存失败", f"保存文件时出错:\n{str(e)}")
+
+import os
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font
+from openpyxl.utils import get_column_letter
+
+from SETTINGS.paths import get_log_directory, ensure_directory_exists
+
+XLSX_AVAILABLE = True
+try:
+    from openpyxl import Workbook
+except ImportError:
+    XLSX_AVAILABLE = False
+
+
+class StatisticsExporter:
+    def __init__(self, original_file_path=None):
+        self.original_file_path = original_file_path
+
+    def _calculate_stats_for_export(self):
+        """计算并返回用于导出的统计信息"""
+        # 这里需要实现具体的统计计算逻辑
+        # 返回一个包含所有状态段统计信息的列表
+        return []
+
+    def save_stats_to_excel(self):
+        """将统计量保存到Excel文件"""
+        if not XLSX_AVAILABLE:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "功能不可用", "缺少openpyxl库，无法保存Excel文件。")
+            return
+        
+        # 获取统计信息
+        all_segments_stats = self._calculate_stats_for_export()
+        
+        if not all_segments_stats:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.information(self, "无数据", "没有状态段数据可供导出。")
+            return
+        
+        # 创建工作簿
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "状态统计量"
+        
+        # 获取传感器名称列表
+        sensor_names = []
+        if all_segments_stats:
+            sensor_names = [stat['name'] for stat in all_segments_stats[0]['sensors_stats']]
+        
+        num_sensors = len(sensor_names)
+        
+        # 写入表头
+        # 第一行：传感器名，每4列合并一个单元格
+        col_index = 1
+        for sensor_name in sensor_names:
+            start_col = col_index
+            end_col = col_index + 3
+            # 合并单元格并写入传感器名
+            ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
+            cell = ws.cell(row=1, column=start_col, value=sensor_name)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = Font(bold=True)
+            col_index += 5  # 4列数据 + 1列间隙
+        
+        # 第二行：最小值、最大值、均值、峰峰值
+        col_index = 1
+        for _ in sensor_names:
+            headers = ['最小值', '最大值', '均值', '峰峰值']
+            for i, header in enumerate(headers):
+                cell = ws.cell(row=2, column=col_index + i, value=header)
+                cell.alignment = Alignment(horizontal="center")
+                cell.font = Font(bold=True)
+            col_index += 5  # 4列数据 + 1列间隙
+        
+        # 从第三行开始写入数据：每个状态段一行
+        for row_index, segment_data in enumerate(all_segments_stats, start=3):
+            col_index = 1
+            for sensor_stat in segment_data['sensors_stats']:
+                # 写入该传感器在该状态段的4个统计值
+                stats_values = [
+                    sensor_stat['seg_min'],
+                    sensor_stat['seg_max'],
+                    sensor_stat['seg_mean'],
+                    sensor_stat['seg_pp']
+                ]
+                
+                for i, value in enumerate(stats_values):
+                    cell = ws.cell(row=row_index, column=col_index + i, value=value)
+                    cell.number_format = '0.0000'  # 设置数字格式
+                
+                col_index += 5  # 4列数据 + 1列间隙
+        
+        # 设置列宽
+        for col_index in range(1, num_sensors * 5):
+            ws.column_dimensions[get_column_letter(col_index)].width = 12
+        
+        # 确定文件保存路径
+        from SETTINGS.paths import get_log_directory, ensure_directory_exists
+        import os
+        
+        # 确保Log目录存在
+        log_dir = get_log_directory()
+        ensure_directory_exists(log_dir)
+        
+        # 生成文件名
+        if self.original_file_path:
+            # 基于原始文件名生成Excel文件名
+            original_filename = os.path.basename(self.original_file_path)
+            name_without_ext, _ = os.path.splitext(original_filename)
+            excel_filename = f"{name_without_ext}状态变量检测.xlsx"
+        else:
+            # 默认文件名
+            excel_filename = "状态变量检测.xlsx"
+        
+        # 完整文件路径
+        file_path = os.path.join(log_dir, excel_filename)
+        
+        try:
+            wb.save(file_path)
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.information(self, "保存成功", f"统计量已保存到:\n{file_path}")
+        except Exception as e:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "保存失败", f"保存文件时出错:\n{str(e)}")
+
