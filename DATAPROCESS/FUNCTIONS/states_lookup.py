@@ -612,16 +612,16 @@ class StatesLookupWindow(QDialog):
         points_layout.addRow("左侧检测点数:", self.left_points_edit)
         points_layout.addRow("右侧检测点数:", self.right_points_edit)
         
+        # 添加应用按钮
+        apply_button = QPushButton("应用设置")
+        apply_button.clicked.connect(self.apply_points_settings)
+        points_layout.addRow(apply_button)
+        
         # 添加保存Excel按钮
         if XLSX_AVAILABLE:
             save_excel_button = QPushButton("保存统计量到Excel")
             save_excel_button.clicked.connect(self.save_stats_to_excel)
             points_layout.addRow(save_excel_button)
-        
-        # 添加应用按钮
-        apply_button = QPushButton("应用设置")
-        apply_button.clicked.connect(self.apply_points_settings)
-        points_layout.addRow(apply_button)
 
         # 统计信息区域
         stats_group = QGroupBox("状态统计量")
