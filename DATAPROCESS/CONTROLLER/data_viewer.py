@@ -112,6 +112,12 @@ class DataViewer(QDialog):
         # 添加稳态差值计算按钮
         self.steady_state_diff_btn = QPushButton("稳态差值计算")
         
+        # 添加保存计算结果按钮
+        self.save_calc_result_btn = QPushButton("保存计算结果")
+        
+        # 添加批量计算结果按钮
+        self.batch_calc_result_btn = QPushButton("批量计算")
+        
         # 添加筛选按钮
         self.filter_btn = QPushButton("行筛选")
         self.reset_filter_btn = QPushButton("重置筛选")
@@ -136,6 +142,8 @@ class DataViewer(QDialog):
         btn_layout.addWidget(self.peak_btn) # 添加计算峰峰值按钮 
         btn_layout.addWidget(self.diff_btn) # 添加计算差值按钮 
         btn_layout.addWidget(self.steady_state_diff_btn)  # 添加稳态差值计算按钮
+        btn_layout.addWidget(self.save_calc_result_btn)  # 添加保存计算结果按钮
+        btn_layout.addWidget(self.batch_calc_result_btn)  # 添加批量计算按钮
         btn_layout.addSpacing(20)
         btn_layout.addWidget(self.convert_btn) # 添加数据转换按钮 
         btn_layout.addSpacing(20)
@@ -187,6 +195,8 @@ class DataViewer(QDialog):
         # 连接信号
         self.mean_btn.clicked.connect(self.calculate_mean)  # 连接计算均值按钮信号
         self.peak_btn.clicked.connect(self.calculate_peak)  # 连接计算峰峰值按钮信号
+        self.save_calc_result_btn.clicked.connect(self.save_calculation_results)  # 连接保存计算结果按钮信号
+        self.batch_calc_result_btn.clicked.connect(self.batch_calculate_results)  # 连接批量计算按钮信号
         self.plot_btn.clicked.connect(self.plot_data)  # 连接绘制曲线按钮信号
         self.scatter_btn.clicked.connect(self.plot_scatter)  # 连接散点图按钮信号
         self.diff_btn.clicked.connect(self.calculate_diff)  # 连接计算差值按钮信号
@@ -200,6 +210,7 @@ class DataViewer(QDialog):
         self.steady_state_diff_btn.clicked.connect(self.calculate_steady_state_diff)  # 连接稳态差值计算按钮信号
         self.toggle_columns_btn.clicked.connect(self.toggle_columns)  # 连接列显示控制按钮信号
         self.save_btn.clicked.connect(self.save_to_file)  # 连接保存按钮信号
+        self.batch_calc_result_btn.clicked.connect(self.batch_calculate_results)  # 连接批量计算按钮信号
     
     def calculate_steady_state_diff(self):
         """计算稳态差值"""
@@ -947,3 +958,221 @@ class DataViewer(QDialog):
         dialog = FilterComparisonDialog(self, self)
         # 仅显示对话框，功能由对话框内部实现
         dialog.exec_()
+
+    def batch_calculate_results(self):
+        """批量计算多个文件的结果"""
+        # 获取当前选中的数据
+        data = self.get_selected_data()
+        if data is None:
+            return
+
+        # 获取选中列的信息
+        selected_columns = {}
+        for col, values in data.items():
+            selected_columns[col] = values['label']
+
+        # 选择其他CSV文件
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self, 
+            "选择要批量计算的CSV文件", 
+            os.path.dirname(self.file_path), 
+            "CSV文件 (*.csv)"
+        )
+
+        if not file_paths:
+            return
+
+        # 获取log目录路径并确保目录存在
+        log_dir = get_log_directory()
+        ensure_directory_exists(log_dir)
+
+        # 生成文件名，带有时间戳
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        file_name = f"批量计算结果-{timestamp}.txt"
+        file_path = os.path.join(log_dir, file_name)
+
+        # 准备结果数据
+        all_results = {
+            'column_names': [values['label'] for values in data.values()],
+            'files': []
+        }
+
+        # 处理当前文件
+        current_file_results = {}
+        for col, values in data.items():
+            mean_val = np.mean(values['y_data'])
+            peak_val = np.max(values['y_data']) - np.min(values['y_data'])
+            current_file_results[values['label']] = {
+                'mean': mean_val,
+                'peak': peak_val
+            }
+        
+        all_results['files'].append({
+            'name': os.path.basename(self.file_path),
+            'results': current_file_results
+        })
+
+        # 处理其他文件
+        for file_path_item in file_paths:
+            try:
+                # 读取文件
+                file_data = self.read_csv_for_batch(file_path_item, selected_columns)
+                if file_data is None:
+                    continue
+                    
+                # 计算均值和峰峰值
+                file_results = {}
+                for col, values in file_data.items():
+                    mean_val = np.mean(values['y_data'])
+                    peak_val = np.max(values['y_data']) - np.min(values['y_data'])
+                    file_results[values['label']] = {
+                        'mean': mean_val,
+                        'peak': peak_val
+                    }
+                
+                all_results['files'].append({
+                    'name': os.path.basename(file_path_item),
+                    'results': file_results
+                })
+            except Exception as e:
+                print(f"处理文件 {file_path_item} 时出错: {str(e)}")
+                continue
+
+        # 写入结果到文件
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                # 写入列信息
+                separator = '" "'
+                f.write(f"选择列为:\"{separator.join(all_results['column_names'])}\"，共{len(all_results['column_names'])}列\n")
+                
+                # 写入文件数量信息
+                f.write(f"\n共处理{len(all_results['files'])}个文件\n")
+                
+                # 写入均值
+                f.write("\n均值：\n")
+                for file_info in all_results['files']:
+                    mean_values = []
+                    for col_name in all_results['column_names']:
+                        if col_name in file_info['results']:
+                            mean_values.append(f"{file_info['results'][col_name]['mean']:.2f}")
+                        else:
+                            mean_values.append("N/A")
+                    f.write(f"{file_info['name']} {' '.join(mean_values)}\n")
+                
+                # 写入峰峰值
+                f.write("\n峰峰值：\n")
+                for file_info in all_results['files']:
+                    peak_values = []
+                    for col_name in all_results['column_names']:
+                        if col_name in file_info['results']:
+                            peak_values.append(f"{file_info['results'][col_name]['peak']:.2f}")
+                        else:
+                            peak_values.append("N/A")
+                    f.write(f"{file_info['name']} {' '.join(peak_values)}\n")
+            
+            QMessageBox.information(self, "批量计算完成", f"批量计算结果已保存到: {file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"保存文件时出错:\n{str(e)}")
+
+    def read_csv_for_batch(self, file_path, selected_columns):
+        """为批量计算读取CSV文件的指定列"""
+        try:
+            with open(file_path, 'r', newline='', encoding=self.encoding, errors='replace') as f:
+                reader = csv.reader(f)
+                data = list(reader)
+                
+                if not data:
+                    return None
+                
+                # 找到表头行
+                header_row = data[0] if data else []
+                
+                # 找到选定列的索引
+                column_indices = {}
+                for col_index, header in enumerate(header_row):
+                    for orig_col, col_name in selected_columns.items():
+                        if header == col_name:
+                            column_indices[col_index] = col_name
+                            break
+                
+                if not column_indices:
+                    return None
+                
+                # 提取数据
+                columns = {}
+                for col_index, col_name in column_indices.items():
+                    columns[col_index] = {
+                        'x_data': [],
+                        'y_data': [],
+                        'label': col_name
+                    }
+                
+                # 填充数据（从第二行开始，因为第一行是表头）
+                for row_index, row in enumerate(data[1:], start=1):
+                    for col_index, col_name in column_indices.items():
+                        if col_index < len(row):
+                            try:
+                                y_val = float(row[col_index])
+                                columns[col_index]['x_data'].append(row_index)
+                                columns[col_index]['y_data'].append(y_val)
+                            except (ValueError, TypeError):
+                                pass  # 跳过非数值
+                
+                # 检查是否有有效数据
+                valid_columns = {col: data for col, data in columns.items() if data['y_data']}
+                return valid_columns if valid_columns else None
+                
+        except Exception as e:
+            print(f"读取文件 {file_path} 时出错: {e}")
+            return None
+
+    def save_calculation_results(self):
+        """保存计算结果（均值和峰峰值）到txt文件"""
+        data = self.get_selected_data()
+        if data is None:
+            return
+
+        # 计算均值和峰峰值
+        results = {}
+        for col, values in data.items():
+            mean_val = np.mean(values['y_data'])
+            peak_val = np.max(values['y_data']) - np.min(values['y_data'])
+            results[col] = {
+                'label': values['label'],
+                'mean': mean_val,
+                'peak': peak_val
+            }
+
+        # 获取log目录路径并确保目录存在
+        log_dir = get_log_directory()
+        ensure_directory_exists(log_dir)
+
+        # 生成文件名
+        base_name = os.path.splitext(os.path.basename(self.file_path))[0]
+        file_name = f"{base_name}-计算结果.txt"
+        file_path = os.path.join(log_dir, file_name)
+        
+        # 处理重名文件
+        from SETTINGS.utils import get_unique_filename
+        unique_file_path = get_unique_filename(file_path)
+
+        # 写入文件
+        try:
+            with open(unique_file_path, 'w', encoding='utf-8') as f:
+                # 写入列信息
+                column_names = [values['label'] for values in data.values()]
+                separator = '" "'
+                f.write(f"选择列为:\"{separator.join(column_names)}\"，共{len(data)}列\n")
+                
+                # 写入均值（保留2位小数）
+                mean_values = [f"{values['mean']:.2f}" for values in results.values()]
+                f.write(f"\n均值：{' '.join(mean_values)}\n")
+                
+                # 写入峰峰值（保留2位小数）
+                peak_values = [f"{values['peak']:.2f}" for values in results.values()]
+                f.write(f"\n峰峰值：{' '.join(peak_values)}\n")
+                
+            QMessageBox.information(self, "保存成功", f"计算结果已保存到: {unique_file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"保存文件时出错:\n{str(e)}")
