@@ -115,8 +115,8 @@ class DataViewer(QDialog):
         # 添加保存计算结果按钮
         self.save_calc_result_btn = QPushButton("保存计算结果")
         
-        # 添加批量计算结果按钮
-        self.batch_calc_result_btn = QPushButton("批量计算")
+        # 添加批量统计量计算结果按钮
+        self.batch_calc_result_btn = QPushButton("批量统计量计算")
         
         # 添加筛选按钮
         self.filter_btn = QPushButton("行筛选")
@@ -143,7 +143,7 @@ class DataViewer(QDialog):
         btn_layout.addWidget(self.diff_btn) # 添加计算差值按钮 
         btn_layout.addWidget(self.steady_state_diff_btn)  # 添加稳态差值计算按钮
         btn_layout.addWidget(self.save_calc_result_btn)  # 添加保存计算结果按钮
-        btn_layout.addWidget(self.batch_calc_result_btn)  # 添加批量计算按钮
+        btn_layout.addWidget(self.batch_calc_result_btn)  # 添加批量统计量计算按钮
         btn_layout.addSpacing(20)
         btn_layout.addWidget(self.convert_btn) # 添加数据转换按钮 
         btn_layout.addSpacing(20)
@@ -196,7 +196,7 @@ class DataViewer(QDialog):
         self.mean_btn.clicked.connect(self.calculate_mean)  # 连接计算均值按钮信号
         self.peak_btn.clicked.connect(self.calculate_peak)  # 连接计算峰峰值按钮信号
         self.save_calc_result_btn.clicked.connect(self.save_calculation_results)  # 连接保存计算结果按钮信号
-        self.batch_calc_result_btn.clicked.connect(self.batch_calculate_results)  # 连接批量计算按钮信号
+        self.batch_calc_result_btn.clicked.connect(self.batch_calculate_results)  # 连接批量统计量计算按钮信号
         self.plot_btn.clicked.connect(self.plot_data)  # 连接绘制曲线按钮信号
         self.scatter_btn.clicked.connect(self.plot_scatter)  # 连接散点图按钮信号
         self.diff_btn.clicked.connect(self.calculate_diff)  # 连接计算差值按钮信号
@@ -210,7 +210,7 @@ class DataViewer(QDialog):
         self.steady_state_diff_btn.clicked.connect(self.calculate_steady_state_diff)  # 连接稳态差值计算按钮信号
         self.toggle_columns_btn.clicked.connect(self.toggle_columns)  # 连接列显示控制按钮信号
         self.save_btn.clicked.connect(self.save_to_file)  # 连接保存按钮信号
-        self.batch_calc_result_btn.clicked.connect(self.batch_calculate_results)  # 连接批量计算按钮信号
+        self.batch_calc_result_btn.clicked.connect(self.batch_calculate_results)  # 连接批量统计量计算按钮信号
     
     def calculate_steady_state_diff(self):
         """计算稳态差值"""
@@ -960,7 +960,7 @@ class DataViewer(QDialog):
         dialog.exec_()
 
     def batch_calculate_results(self):
-        """批量计算多个文件的结果"""
+        """批量统计量计算多个文件的结果"""
         # 获取当前选中的数据
         data = self.get_selected_data()
         if data is None:
@@ -974,7 +974,7 @@ class DataViewer(QDialog):
         # 选择其他CSV文件
         file_paths, _ = QFileDialog.getOpenFileNames(
             self, 
-            "选择要批量计算的CSV文件", 
+            "选择要批量统计量计算的CSV文件", 
             os.path.dirname(self.file_path), 
             "CSV文件 (*.csv)"
         )
@@ -989,7 +989,7 @@ class DataViewer(QDialog):
         # 生成文件名，带有时间戳
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        file_name = f"批量计算结果-{timestamp}.txt"
+        file_name = f"批量统计量计算结果-{timestamp}.txt"
         file_path = os.path.join(log_dir, file_name)
 
         # 准备结果数据
@@ -1071,12 +1071,12 @@ class DataViewer(QDialog):
                             peak_values.append("N/A")
                     f.write(f"{file_info['name']} {' '.join(peak_values)}\n")
             
-            QMessageBox.information(self, "批量计算完成", f"批量计算结果已保存到: {file_path}")
+            QMessageBox.information(self, "批量统计量计算完成", f"批量统计量计算结果已保存到: {file_path}")
         except Exception as e:
             QMessageBox.critical(self, "保存失败", f"保存文件时出错:\n{str(e)}")
 
     def read_csv_for_batch(self, file_path, selected_columns):
-        """为批量计算读取CSV文件的指定列"""
+        """为批量统计量计算读取CSV文件的指定列"""
         try:
             with open(file_path, 'r', newline='', encoding=self.encoding, errors='replace') as f:
                 reader = csv.reader(f)

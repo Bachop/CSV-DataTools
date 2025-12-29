@@ -4,12 +4,14 @@
 """
 
 import os
+import csv
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QLineEdit, QMessageBox, QListWidget, 
-                             QListWidgetItem, QAbstractItemView)
+                             QListWidgetItem, QAbstractItemView, QFileDialog)
 from PyQt5.QtCore import Qt
 
 from SETTINGS.paths import get_log_directory, ensure_directory_exists
+from SETTINGS.utils import get_unique_filename
 
 
 class SteadyStateDiffDialog(QDialog):
@@ -58,10 +60,13 @@ class SteadyStateDiffDialog(QDialog):
         # 按钮
         button_layout = QHBoxLayout()
         self.calculate_btn = QPushButton("计算稳态差值")
+        self.batch_calculate_btn = QPushButton("批量计算稳态差值")
         self.cancel_btn = QPushButton("取消")
         self.calculate_btn.clicked.connect(self.calculate_steady_state_diff)
+        self.batch_calculate_btn.clicked.connect(self.batch_calculate_steady_state_diff)
         self.cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(self.calculate_btn)
+        button_layout.addWidget(self.batch_calculate_btn)
         button_layout.addWidget(self.cancel_btn)
         layout.addLayout(button_layout)
         
@@ -183,7 +188,6 @@ class SteadyStateDiffDialog(QDialog):
             file_name = f"{base_name}-稳态差值.txt"
             file_path = os.path.join(log_dir, file_name)
             # 使用现有的避免覆盖的文件名函数
-            from SETTINGS import get_unique_filename
             unique_file_path = get_unique_filename(file_path)
             
             # 写入文件
@@ -209,3 +213,235 @@ class SteadyStateDiffDialog(QDialog):
             QMessageBox.information(self, "保存成功", f"计算结果已保存到: {unique_file_path}")
         except Exception as e:
             raise Exception(f"保存文件时出错: {str(e)}")
+    
+    def batch_calculate_steady_state_diff(self):
+        """批量计算稳态差值"""
+        try:
+            # 获取选中的列
+            selected_items = self.list_widget.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(self, "警告", "请至少选择一列进行计算")
+                return
+            
+            selected_columns = [item.data(Qt.UserRole) for item in selected_items]
+            selected_column_names = [self.column_names[col] if col < len(self.column_names) else f"列{col+1}" 
+                                   for col in selected_columns]
+            
+            # 获取稳态点数
+            try:
+                steady0_count = int(self.steady0_count_edit.text())
+                steady1_count = int(self.steady1_count_edit.text())
+                
+                if steady0_count <= 0 or steady1_count <= 0:
+                    QMessageBox.warning(self, "警告", "稳态点数必须大于0")
+                    return
+            except ValueError:
+                QMessageBox.warning(self, "警告", "请输入有效的稳态点数")
+                return
+            
+            # 选择要处理的文件（包括当前文件）
+            parent_window = self.parent()
+            current_file_path = getattr(parent_window, 'file_path', '')
+            
+            file_paths, _ = QFileDialog.getOpenFileNames(
+                self, 
+                "选择要批量处理的CSV文件（自动包含当前文件）", 
+                os.path.dirname(current_file_path) if current_file_path else "", 
+                "CSV文件 (*.csv)"
+            )
+            
+            # 如果当前文件不在列表中，则添加进去
+            if current_file_path and current_file_path not in file_paths:
+                file_paths.insert(0, current_file_path)
+            
+            if not file_paths:
+                QMessageBox.warning(self, "警告", "未选择任何文件")
+                return
+            
+            # 存储所有文件的计算结果
+            batch_results = {}
+            
+            # 处理每个文件
+            for file_path in file_paths:
+                try:
+                    # 读取CSV文件
+                    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                        reader = csv.reader(f)
+                        data = list(reader)
+                    
+                    # 解析数据
+                    if not data:
+                        batch_results[os.path.basename(file_path)] = {
+                            'error': '文件为空',
+                            'columns': {}
+                        }
+                        continue
+                    
+                    # 获取表头
+                    headers = data[0] if data else []
+                    
+                    # 验证选中的列索引是否在当前文件中有效
+                    max_column_index = max(selected_columns)
+                    if max_column_index >= len(headers):
+                        batch_results[os.path.basename(file_path)] = {
+                            'error': f'文件中列数不足，无法找到索引为 {max_column_index} 的列（当前文件最多 {len(headers)} 列）',
+                            'columns': {}
+                        }
+                        continue
+                    
+                    # 获取数据行
+                    rows_data = data[1:] if len(data) > 1 else []
+                    
+                    if steady0_count + steady1_count > len(rows_data):
+                        batch_results[os.path.basename(file_path)] = {
+                            'error': f'稳态点数之和({steady0_count + steady1_count})超过总行数({len(rows_data)})',
+                            'columns': {}
+                        }
+                        continue
+                    
+                    # 计算每列的稳态差值
+                    file_column_results = {}
+                    for col_idx in selected_columns:
+                        # 获取列数据
+                        column_data = []
+                        for row in rows_data:
+                            if col_idx < len(row) and row[col_idx]:
+                                try:
+                                    value = float(row[col_idx])
+                                    column_data.append(value)
+                                except ValueError:
+                                    # 跳过非数值数据
+                                    pass
+                        
+                        if len(column_data) == 0:
+                            file_column_results[self.column_names[col_idx] if col_idx < len(self.column_names) else f"列{col_idx+1}"] = {
+                                'error': '该列没有有效数据'
+                            }
+                            continue
+                        
+                        # 计算稳态0（前steady0_count个点）
+                        steady0_data = column_data[:steady0_count]
+                        steady0_avg = sum(steady0_data) / len(steady0_data)
+                        steady0_min = min(steady0_data)
+                        steady0_max = max(steady0_data)
+                        steady0_pp = steady0_max - steady0_min
+                        
+                        # 计算稳态1（后steady1_count个点）
+                        steady1_data = column_data[-steady1_count:]
+                        steady1_avg = sum(steady1_data) / len(steady1_data)
+                        steady1_min = min(steady1_data)
+                        steady1_max = max(steady1_data)
+                        steady1_pp = steady1_max - steady1_min
+                        
+                        # 计算差值
+                        diff = steady1_avg - steady0_avg
+                        
+                        file_column_results[self.column_names[col_idx] if col_idx < len(self.column_names) else f"列{col_idx+1}"] = {
+                            'steady0_avg': steady0_avg,
+                            'steady0_pp': steady0_pp,
+                            'steady1_avg': steady1_avg,
+                            'steady1_pp': steady1_pp,
+                            'diff': diff
+                        }
+                    
+                    batch_results[os.path.basename(file_path)] = {
+                        'columns': file_column_results
+                    }
+                    
+                except Exception as e:
+                    batch_results[os.path.basename(file_path)] = {
+                        'error': f'处理文件时出错: {str(e)}',
+                        'columns': {}
+                    }
+            
+            # 保存批量计算结果到文件
+            self.save_batch_results_to_file(batch_results, steady0_count, steady1_count, selected_column_names)
+            
+            # 显示成功消息
+            QMessageBox.information(self, "成功", f"批量稳态差值计算完成，结果已保存到log目录")
+            self.accept()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"批量计算过程中发生错误: {str(e)}")
+
+    def save_batch_results_to_file(self, batch_results, steady0_count, steady1_count, selected_columns):
+        """将批量计算结果保存到txt文件"""
+        try:
+            # 获取log目录路径并确保目录存在
+            log_dir = get_log_directory()
+            ensure_directory_exists(log_dir)
+            
+            # 生成文件名
+            file_name = f"批量稳态差值计算结果.txt"
+            file_path = os.path.join(log_dir, file_name)
+            # 使用现有的避免覆盖的文件名函数
+            unique_file_path = get_unique_filename(file_path)
+            
+            # 写入文件
+            with open(unique_file_path, 'w', encoding='utf-8') as f:
+                f.write("批量稳态差值计算结果\n")
+                f.write("=" * 50 + "\n")
+                f.write(f"稳态0点数: {steady0_count}\n")
+                f.write(f"稳态1点数: {steady1_count}\n")
+                f.write(f"选择列: {' '.join(selected_columns)}\n")
+                f.write(f"共处理 {len(batch_results)} 个文件\n")
+                f.write("=" * 50 + "\n\n")
+                
+                # 写入均值部分
+                f.write("稳态0均值:\n")
+                f.write("-" * 30 + "\n")
+                for file_name, result in batch_results.items():
+                    if 'error' in result:
+                        f.write(f"{file_name}: {result['error']}\n")
+                    else:
+                        values = []
+                        for col_name in selected_columns:
+                            if col_name in result['columns']:
+                                col_result = result['columns'][col_name]
+                                if 'error' in col_result:
+                                    values.append("N/A")
+                                else:
+                                    values.append(f"{col_result['steady0_avg']:.2f}")
+                            else:
+                                values.append("N/A")
+                        f.write(f"{file_name} {' '.join(values)}\n")
+                
+                f.write("\n稳态1均值:\n")
+                f.write("-" * 30 + "\n")
+                for file_name, result in batch_results.items():
+                    if 'error' in result:
+                        f.write(f"{file_name}: {result['error']}\n")
+                    else:
+                        values = []
+                        for col_name in selected_columns:
+                            if col_name in result['columns']:
+                                col_result = result['columns'][col_name]
+                                if 'error' in col_result:
+                                    values.append("N/A")
+                                else:
+                                    values.append(f"{col_result['steady1_avg']:.2f}")
+                            else:
+                                values.append("N/A")
+                        f.write(f"{file_name} {' '.join(values)}\n")
+                
+                f.write("\n稳态差值(稳态1均值-稳态0均值):\n")
+                f.write("-" * 30 + "\n")
+                for file_name, result in batch_results.items():
+                    if 'error' in result:
+                        f.write(f"{file_name}: {result['error']}\n")
+                    else:
+                        values = []
+                        for col_name in selected_columns:
+                            if col_name in result['columns']:
+                                col_result = result['columns'][col_name]
+                                if 'error' in col_result:
+                                    values.append("N/A")
+                                else:
+                                    values.append(f"{col_result['diff']:.2f}")
+                            else:
+                                values.append("N/A")
+                        f.write(f"{file_name} {' '.join(values)}\n")
+            
+            QMessageBox.information(self, "保存成功", f"批量计算结果已保存到: {unique_file_path}")
+        except Exception as e:
+            raise Exception(f"保存批量计算结果时出错: {str(e)}")
