@@ -1,6 +1,6 @@
 # *CSV-DataTools* 数据处理工具
 
-*CSV-DataTools* 是一个多功能 *CSV* 数据处理工具，支持数据处理、分析和提供图形界面以实现可视化功能。
+基于 *Python* 开发的多功能 *CSV* 数据处理工具，支持数据处理、分析和提供图形界面以实现可视化功能。
 
 *Programmed by [@Bachop](https://github.com/Bachop)*.
 <!--<br>*Click* **[HERE](#更新日志)** *to view Date-based-Changelog*.--->
