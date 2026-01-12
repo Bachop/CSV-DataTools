@@ -10,7 +10,7 @@ import sys
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTextEdit, QLabel, QFrame, QSplitter, QDesktopWidget,
                              QWidget, QSizePolicy, QLineEdit, QFormLayout,QMessageBox)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QEvent, QPoint
 from PyQt5.QtGui import QCursor
 import platform
 
@@ -45,6 +45,13 @@ class PlotWindow(QDialog):
         self.is_dragging = False
         self.coord_tooltip = None
         self.selected_curves = set()    # 多选功能：选中的曲线集合
+        # Shift 临时选择支持
+        self.shift_pressed = False
+        self.shift_backup_selected = None
+        self.shift_temp_selected = set()
+
+        # 曲线上右键标注的点数据结构：列表的每项为 dict {'x','y','curve'}
+        self.point_markers = []
         
         # 参考值变量
         self.upper_limit = None
@@ -303,6 +310,14 @@ class PlotWindow(QDialog):
                 stats_height = current_height - button_height
                 self.right_splitter.setSizes([button_height, stats_height])
             
+            try:
+                self.figure1.tight_layout()
+            except Exception:
+                pass
+            try:
+                self.figure2.tight_layout()
+            except Exception:
+                pass
             self.canvas1.draw()
             if hasattr(self, 'canvas2'):
                 self.canvas2.draw()
@@ -397,7 +412,8 @@ class PlotWindow(QDialog):
         
         # 添加"全部曲线"按钮
         all_button = QPushButton("全部曲线")
-        all_button.clicked.connect(lambda: self.select_curve(None))
+        all_button.pressed.connect(lambda idx=None: self.on_curve_button_pressed(idx))
+        all_button.clicked.connect(lambda checked, idx=None: self.on_curve_button_clicked(idx))
         self.button_layout.addWidget(all_button)
         self.curve_buttons.append(all_button)
         
@@ -406,7 +422,10 @@ class PlotWindow(QDialog):
             label = self.labels.get(col_idx, f"列{col_idx+1}")
             # 使用默认参数修复闭包问题
             button = QPushButton(label)
-            button.clicked.connect(lambda checked, idx=col_idx: self.select_curve(idx))
+            # 使用 pressed 处理 Shift 按住期间的临时选择
+            button.pressed.connect(lambda idx=col_idx: self.on_curve_button_pressed(idx))
+            # 使用 clicked 处理常规切换（不是 Shift 临时选择）
+            button.clicked.connect(lambda checked, idx=col_idx: self.on_curve_button_clicked(idx))
             self.button_layout.addWidget(button)
             self.curve_buttons.append(button)
         
@@ -420,18 +439,18 @@ class PlotWindow(QDialog):
         """选择要显示的曲线"""
         # 如果curve_idx为None，表示选择全部曲线
         if curve_idx is None:
-            # 如果已经选择了全部曲线，则清空选择
-            if len(self.selected_curves) == len(self.y_data_dict.keys()) or len(self.selected_curves) == 0:
-                self.selected_curves.clear()
-            else:
-                # 否则选择所有曲线
-                self.selected_curves = set(self.y_data_dict.keys())
+            # 无论是否按住 Shift，点击全部曲线应显示全部曲线
+            self.selected_curves = set(self.y_data_dict.keys())
         else:
-            # 切换曲线的选中状态
-            if curve_idx in self.selected_curves:
-                self.selected_curves.remove(curve_idx)
+            # 非 Shift 模式：单选（仅显示当前点击的曲线）
+            if not getattr(self, 'shift_pressed', False):
+                self.selected_curves = {curve_idx}
             else:
-                self.selected_curves.add(curve_idx)
+                # Shift 模式：切换曲线的选中状态
+                if curve_idx in self.selected_curves:
+                    self.selected_curves.remove(curve_idx)
+                else:
+                    self.selected_curves.add(curve_idx)
         
         # 更新按钮状态
         for i, button in enumerate(self.curve_buttons):
@@ -464,6 +483,81 @@ class PlotWindow(QDialog):
         
         # 重新绘制图表
         self.redraw_plots()
+        try:
+            self.update_stats_display()
+        except Exception:
+            pass
+
+    def on_curve_button_pressed(self, curve_idx):
+        """处理曲线按钮按下（支持 Shift 临时选择）"""
+        # 如果没有按住 Shift，则不在这里处理（交由 clicked 处理）
+        try:
+            if not self.shift_pressed:
+                return
+
+            # 第一次进入 Shift 临时选择时备份当前选择
+            if self.shift_backup_selected is None:
+                self.shift_backup_selected = set(self.selected_curves)
+                self.shift_temp_selected = set(self.selected_curves)
+
+            # 处理全部曲线按钮
+            if curve_idx is None:
+                # 切换为全选/全不选临时状态
+                if set(self.shift_temp_selected) == set(self.y_data_dict.keys()):
+                    self.shift_temp_selected.clear()
+                else:
+                    self.shift_temp_selected = set(self.y_data_dict.keys())
+            else:
+                # 切换指定曲线在临时集合中的状态
+                if curve_idx in self.shift_temp_selected:
+                    self.shift_temp_selected.remove(curve_idx)
+                else:
+                    self.shift_temp_selected.add(curve_idx)
+
+            # 应用临时选择并刷新
+            self.selected_curves = set(self.shift_temp_selected)
+            self.update_curve_buttons_style()
+            self.redraw_plots()
+        except Exception:
+            pass
+
+    def on_curve_button_clicked(self, curve_idx):
+        """处理曲线按钮点击（常规切换）"""
+        # 如果 Shift 正在按下，我们在 pressed 已处理了临时选择，因此忽略 clicked
+        if self.shift_pressed:
+            return
+        self.select_curve(curve_idx)
+
+    def update_curve_buttons_style(self):
+        """更新侧边按钮样式以反映当前 selected_curves"""
+        try:
+            for i, button in enumerate(self.curve_buttons):
+                if i == 0:  # 全部曲线按钮
+                    if len(self.selected_curves) == len(self.y_data_dict.keys()) or len(self.selected_curves) == 0:
+                        button.setStyleSheet("background-color: lightblue;")
+                    else:
+                        button.setStyleSheet("")
+                elif i > 0:
+                    try:
+                        data_keys = sorted(self.y_data_dict.keys())
+                        if i-1 < len(data_keys):
+                            curve_index = data_keys[i-1]
+                            if curve_index in self.selected_curves:
+                                button.setStyleSheet("background-color: lightblue;")
+                            else:
+                                button.setStyleSheet("")
+                        else:
+                            button.setStyleSheet("")
+                    except Exception:
+                        button.setStyleSheet("")
+                else:
+                    button.setStyleSheet("")
+        except Exception:
+            pass
+        try:
+            self.update_stats_display()
+        except Exception:
+            pass
     
     def redraw_plots(self):
         """重新绘制图表"""
@@ -597,13 +691,134 @@ class PlotWindow(QDialog):
             
             # 绘制参考线
             self.draw_reference_lines()
+
+            # 重新绘制之前右键标注的点（及其坐标标签）
+            try:
+                xlim = self.ax1.get_xlim()
+                ylim = self.ax1.get_ylim()
+                x_mid = (xlim[0] + xlim[1]) / 2.0
+                y_mid = (ylim[0] + ylim[1]) / 2.0
+                for m in getattr(self, 'point_markers', []):
+                    mx, my = m.get('x'), m.get('y')
+                    # 绘制空心圆点作为标注
+                    self.ax1.plot([mx], [my], 'o', markerfacecolor='none', markeredgecolor='black', markersize=8, zorder=5)
+                    # 文本放置在点的象限（使点成为标签的一个角），优先使用 marker 中的 quadrant
+                    quad = m.get('quad')
+                    if quad is None:
+                        dx = 10 if mx < x_mid else -10
+                        dy = 10 if my < y_mid else -10
+                    else:
+                        sx, sy = quad
+                        dx = 10 if sx > 0 else -10
+                        dy = 10 if sy > 0 else -10
+                    ha = 'left' if dx > 0 else 'right'
+                    va = 'bottom' if dy > 0 else 'top'
+                    label = m.get('label_text') if m.get('label_text') else self.labels.get(m.get('curve'), f"曲线 {m.get('curve')+1}")
+                    txt = f"{label}: x={mx:.4f}, y={my:.4f}"
+                    ann = self.ax1.annotate(txt, xy=(mx, my), xytext=(dx, dy), textcoords='offset points',
+                                      ha=ha, va=va, bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='black'), zorder=6)
+                    # 保存注释对象以便交互检测
+                    try:
+                        m['annot'] = ann
+                    except Exception:
+                        m['annot'] = None
+            except Exception:
+                pass
             
             self.figure1.tight_layout()
             self.canvas1.draw()
             self.figure2.tight_layout()
             self.canvas2.draw()
+            try:
+                self.update_stats_display()
+            except Exception:
+                pass
         except Exception:
             pass
+
+    def update_stats_display(self):
+        """按照指定格式更新统计信息显示区。
+
+        格式：
+        起始点：xx
+        结束点：xx
+        总计：xx点
+        选择x条曲线
+
+        曲线名(列名)：
+        最大值：xxx
+        最小值：xxx
+        均值：xxx
+        峰峰值：xxx
+        """
+        try:
+            # 确定要显示统计的曲线
+            curves = list(self.selected_curves) if self.selected_curves else list(self.y_data_dict.keys())
+
+            if not curves or not self.x_data_dict:
+                self.stats_info.setPlainText("无可用数据")
+                return
+
+            # 确定起止索引
+            if self.selection_start is not None and self.selection_end is not None:
+                start_idx = min(self.selection_start, self.selection_end)
+                end_idx = max(self.selection_start, self.selection_end)
+            else:
+                # 使用第一条曲线作为参考范围
+                try:
+                    first_key = next(iter(self.x_data_dict))
+                    start_idx = 0
+                    end_idx = max(0, len(self.x_data_dict[first_key]) - 1)
+                except Exception:
+                    start_idx = 0
+                    end_idx = 0
+
+            total_points = max(0, end_idx - start_idx + 1)
+
+            lines = []
+            lines.append(f"起始点：{start_idx}")
+            lines.append(f"结束点：{end_idx}")
+            lines.append(f"总计：{total_points}点")
+            lines.append(f"选择{len(curves)}条曲线")
+            lines.append("")
+
+            for col_idx in curves:
+                try:
+                    label = self.labels.get(col_idx, f"曲线 {col_idx+1}")
+                except Exception:
+                    label = f"曲线 {col_idx+1}"
+
+                # 获取数据段，确保索引有效
+                if col_idx in self.y_data_dict:
+                    ydata = self.y_data_dict[col_idx]
+                    s = max(0, start_idx)
+                    e = min(end_idx, len(ydata) - 1)
+                    if e >= s and len(ydata) > 0:
+                        seg = np.array(ydata[s:e+1], dtype=float)
+                        if seg.size > 0:
+                            vmax = np.max(seg)
+                            vmin = np.min(seg)
+                            vmean = np.mean(seg)
+                            vptp = np.ptp(seg)
+                            lines.append(f"{label}(列{col_idx+1})：")
+                            lines.append(f"最大值：{vmax:.4f}")
+                            lines.append(f"最小值：{vmin:.4f}")
+                            lines.append(f"均值：{vmean:.4f}")
+                            lines.append(f"峰峰值：{vptp:.4f}")
+                            lines.append("")
+                        else:
+                            lines.append(f"{label}(列{col_idx+1})： 无有效数据\n")
+                    else:
+                        lines.append(f"{label}(列{col_idx+1})： 无有效数据\n")
+                else:
+                    lines.append(f"{label}(列{col_idx+1})： 无数据\n")
+
+            self.stats_info.setPlainText("\n".join(lines))
+        except Exception:
+            try:
+                self.stats_info.setPlainText("无法计算统计信息")
+            except Exception:
+                pass
     
     def draw_reference_lines(self):
         """绘制参考线（上限、下限和参考值）"""
@@ -710,12 +925,11 @@ class PlotWindow(QDialog):
     
     def show_coord_tooltip(self, x, y, idx, curve_idx):
         """显示坐标提示框"""
-        self.hide_coord_tooltip()
-        
+        # 保留原有一次性提示功能（用于其他场景），但右键持久标签另行创建
         try:
             label = self.labels.get(curve_idx, f"曲线 {curve_idx+1}")
-            self.coord_tooltip = QLabel(f"{label}: x={x:.4f}, y={y:.4f}", self)
-            self.coord_tooltip.setStyleSheet("""
+            tooltip = QLabel(f"{label}: x={x:.4f}, y={y:.4f}", self)
+            tooltip.setStyleSheet("""
                 background-color: #333333;
                 color: #FFFFFF;
                 border: 1px solid #666666;
@@ -723,29 +937,72 @@ class PlotWindow(QDialog):
                 padding: 5px;
                 font-weight: bold;
             """)
-            self.coord_tooltip.setWindowFlags(Qt.ToolTip)
-            
-            # 定位提示框
+            tooltip.setWindowFlags(Qt.ToolTip)
+
             pos = self.mapFromGlobal(QCursor.pos())
-            tooltip_width = self.coord_tooltip.sizeHint().width()
-            tooltip_height = self.coord_tooltip.sizeHint().height()
-            
+            tooltip_width = tooltip.sizeHint().width()
+            tooltip_height = tooltip.sizeHint().height()
+
             x_pos = min(pos.x() + 10, self.width() - tooltip_width - 10)
             y_pos = min(pos.y() + 10, self.height() - tooltip_height - 10)
-            
-            self.coord_tooltip.move(x_pos, y_pos)
-            self.coord_tooltip.show()
+
+            tooltip.move(x_pos, y_pos)
+            tooltip.show()
+            # 自动在短时间后隐藏
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(2500, tooltip.hide)
         except Exception:
             pass
+
+    def _create_persistent_label(self, x, y, idx, curve_idx):
+        """创建可点击删除的持久坐标标签并返回 QLabel"""
+        try:
+            label_text = self.labels.get(curve_idx, f"曲线 {curve_idx+1}") + f": x={x:.4f}, y={y:.4f}"
+            lbl = QLabel(label_text, self)
+            lbl.setStyleSheet("""
+                background-color: #ffffff;
+                color: #000000;
+                border: 1px solid #666666;
+                border-radius: 4px;
+                padding: 4px;
+            """)
+            lbl.setWindowFlags(Qt.Tool)
+            lbl.setAttribute(Qt.WA_ShowWithoutActivating)
+            # 放置在点附近：将数据坐标转为窗口坐标
+            try:
+                px, py = self.ax1.transData.transform((x, y))
+                # transform to widget coords
+                canvas_pos = self.canvas1.mapToGlobal(self.canvas1.rect().topLeft())
+                global_x = int(canvas_pos.x() + px)
+                global_y = int(canvas_pos.y() + py)
+                local_pos = self.mapFromGlobal(QPoint(global_x, global_y))
+            except Exception:
+                local_pos = self.mapFromGlobal(QCursor.pos())
+
+            tooltip_width = lbl.sizeHint().width()
+            tooltip_height = lbl.sizeHint().height()
+            x_pos = min(local_pos.x() + 10, self.width() - tooltip_width - 10)
+            y_pos = min(local_pos.y() + 10, self.height() - tooltip_height - 10)
+            lbl.move(x_pos, y_pos)
+            lbl.show()
+            # 安装事件过滤器以便点击标签时删除对应标记
+            lbl.installEventFilter(self)
+            return lbl
+        except Exception:
+            return None
     
     def hide_coord_tooltip(self):
         """隐藏坐标提示框"""
-        if self.coord_tooltip:
-            try:
+        try:
+            if hasattr(self, 'coord_tooltip') and self.coord_tooltip:
                 self.coord_tooltip.hide()
                 self.coord_tooltip = None
-            except:
-                self.coord_tooltip = None
+        except Exception:
+            pass
+
+    def eventFilter(self, obj, event):
+        """保留 base eventFilter（目前不使用 QLabel 事件过滤）"""
+        return super().eventFilter(obj, event)
     
     def wrap_toolbar_methods(self, toolbar):
         """包装工具栏方法以跟踪状态"""
@@ -785,17 +1042,128 @@ class PlotWindow(QDialog):
         if not event.inaxes or not self.ax1 or event.xdata is None or event.ydata is None:
             return
         
-        # 右键显示坐标
+        # 明示点（用于某些判断使用默认阈值）
+        found_marker = self.find_marker_at(event.xdata, event.ydata)
+        
+        # 右键显示坐标 / 双击空白删除所有标注
         if event.button == 3:  # 右键
+            # 对右键操作使用更严格的命中检测阈值，避免在拖拽等情况下误判已有标注
+            found_marker_strict = self.find_marker_at(event.xdata, event.ydata, pixel_threshold=4)
+            # 右键：如果严格命中已有标注则移除该标注
+            if found_marker_strict is not None:
+                try:
+                    # 在移除标注前删除其 artist/annot，避免完整重绘
+                    a = found_marker_strict.get('artist')
+                    if a is not None:
+                        try:
+                            a.remove()
+                        except Exception:
+                            pass
+                    ann = found_marker_strict.get('annot')
+                    if ann is not None:
+                        try:
+                            ann.remove()
+                        except Exception:
+                            pass
+                    try:
+                        self.point_markers.remove(found_marker_strict)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+                try:
+                    self.canvas1.draw()
+                except Exception:
+                    pass
+                return
+
             on_curve, idx, curve_idx = self.is_click_on_curve(event.xdata, event.ydata)
-            if on_curve and curve_idx in self.x_data_dict and idx < len(self.x_data_dict[curve_idx]):
+            # 如果没有严格命中已有标注，则尝试在曲线上添加新标注
+            if (found_marker_strict is None) and on_curve and curve_idx in self.x_data_dict and idx < len(self.x_data_dict[curve_idx]):
                 x_data = self.x_data_dict[curve_idx][idx]
                 y_data = self.y_data_dict[curve_idx][idx]
-                self.show_coord_tooltip(x_data, y_data, idx, curve_idx)
+                # 添加标注点数据（非重绘方式：直接创建 artist 与注释并保存引用）
+                try:
+                    marker = {'x': x_data, 'y': y_data, 'curve': curve_idx, 'label_text': None, 'quad': None, 'annot': None, 'artist': None}
+                    # 创建点 artist
+                    try:
+                        artists = self.ax1.plot([x_data], [y_data], 'o', markerfacecolor='none', markeredgecolor='black', markersize=8, zorder=5)
+                        if artists:
+                            marker['artist'] = artists[0]
+                    except Exception:
+                        marker['artist'] = None
+                    # 创建注释
+                    try:
+                        xlim = self.ax1.get_xlim()
+                        ylim = self.ax1.get_ylim()
+                        x_mid = (xlim[0] + xlim[1]) / 2.0
+                        y_mid = (ylim[0] + ylim[1]) / 2.0
+                        dx = 10 if x_data < x_mid else -10
+                        dy = 10 if y_data < y_mid else -10
+                        label = marker.get('label_text') if marker.get('label_text') else self.labels.get(curve_idx, f"曲线 {curve_idx+1}")
+                        txt = f"{label}: x={x_data:.4f}, y={y_data:.4f}"
+                        ann = self.ax1.annotate(txt, xy=(x_data, y_data), xytext=(dx, dy), textcoords='offset points',
+                                                ha='left' if dx>0 else 'right', va='bottom' if dy>0 else 'top',
+                                                bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='black'), zorder=6)
+                        marker['annot'] = ann
+                    except Exception:
+                        marker['annot'] = None
+                    self.point_markers.append(marker)
+                except Exception:
+                    pass
+
+                try:
+                    # 仅重绘 canvas1，避免清除拖拽的临时显示
+                    self.canvas1.draw()
+                except Exception:
+                    pass
             return
         
-        # 处理区域选择开始 - 左键
+        # 处理区域选择开始或标签拖拽 - 左键
         if event.button == 1:  # 左键
+            # 检查左键双击空白区域以删除所有明示点（功能从右键迁移到左键）
+            try:
+                on_curve_temp, idx_temp, curve_idx_temp = self.is_click_on_curve(event.xdata, event.ydata)
+                if getattr(event, 'dblclick', False) and (not on_curve_temp) and found_marker is None:
+                    self.clear_point_markers()
+                    return
+            except Exception:
+                pass
+
+            # 先检测是否点中某个注释文本区域（需要 renderer）以开始标签拖拽
+            try:
+                renderer = self.canvas1.get_renderer()
+                for m in getattr(self, 'point_markers', []):
+                    ann = m.get('annot')
+                    if ann is None:
+                        continue
+                    try:
+                        bbox = ann.get_window_extent(renderer)
+                        # 事件提供的 x,y 是相对于 canvas 的像素坐标
+                        ex, ey = event.x, event.y
+                        if bbox.contains(ex, ey):
+                            # 开始拖拽该标签
+                            self.label_dragging = True
+                            self.dragging_marker = m
+                            return
+                        else:
+                            # 如果 bbox 检测失败，退而求其次：检查是否点击在标记点附近（像素距离）
+                            try:
+                                mx, my = m.get('x'), m.get('y')
+                                px, py = self.ax1.transData.transform((mx, my))
+                                dist = ((px - ex)**2 + (py - ey)**2)**0.5
+                                if dist <= 8:  # 8 像素阈值回退检测
+                                    self.label_dragging = True
+                                    self.dragging_marker = m
+                                    return
+                            except Exception:
+                                pass
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            # 否则作为区域选择开始
             self.drag_start_x = event.xdata
             self.is_dragging = False
     
@@ -811,6 +1179,25 @@ class PlotWindow(QDialog):
         # 找到最接近的索引
         idx = np.abs(np.array(x_data) - x_target).argmin()
         return int(idx)
+
+    def find_marker_at(self, x, y, pixel_threshold=6):
+        """查找是否点击到了已有标注点，返回该标注点的 dict 或 None"""
+        try:
+            if not getattr(self, 'point_markers', None):
+                return None
+            click_px, click_py = self.ax1.transData.transform((x, y))
+            min_dist = float('inf')
+            found = None
+            for m in self.point_markers:
+                mx, my = m.get('x'), m.get('y')
+                px, py = self.ax1.transData.transform((mx, my))
+                dist = ((px - click_px)**2 + (py - click_py)**2)**0.5
+                if dist < min_dist:
+                    min_dist = dist
+                    found = m
+            return found if min_dist <= pixel_threshold else None
+        except Exception:
+            return None
     
     def on_mouse_move(self, event):
         """处理鼠标移动事件"""
@@ -819,9 +1206,58 @@ class PlotWindow(QDialog):
             return
         
         # 验证状态
-        if (not self.drag_start_x or 
-            not event.inaxes or not self.ax1 or event.xdata is None or event.button != 1):
+        if (not event.inaxes or not self.ax1 or event.xdata is None or event.button != 1):
             return
+
+        # 如果正在拖拽标签，则更新该标签的象限位置（仅四象限）
+        try:
+            if getattr(self, 'label_dragging', False) and getattr(self, 'dragging_marker', None):
+                m = self.dragging_marker
+                # 计算鼠标相对于标记点在像素坐标的偏移
+                mx, my = m.get('x'), m.get('y')
+                px, py = self.ax1.transData.transform((mx, my))
+                # 事件的像素坐标
+                ex, ey = event.x, event.y
+                sx = 1 if (ex - px) >= 0 else -1
+                sy = 1 if (ey - py) >= 0 else -1
+                m['quad'] = (sx, sy)
+                # 仅更新该标注的注释位置，不触发完整重绘，避免清除选择框
+                try:
+                    # 更新 annotation（重建或调整）
+                    try:
+                        if m.get('annot') is not None:
+                            try:
+                                m['annot'].remove()
+                            except Exception:
+                                pass
+                            m['annot'] = None
+                    except Exception:
+                        pass
+                    try:
+                        xlim = self.ax1.get_xlim()
+                        ylim = self.ax1.get_ylim()
+                        x_mid = (xlim[0] + xlim[1]) / 2.0
+                        y_mid = (ylim[0] + ylim[1]) / 2.0
+                        dx = 10 if mx < x_mid else -10
+                        dy = 10 if my < y_mid else -10
+                        label = m.get('label_text') if m.get('label_text') else self.labels.get(m.get('curve'), f"曲线 {m.get('curve')+1}")
+                        txt = f"{label}: x={mx:.4f}, y={my:.4f}"
+                        ann = self.ax1.annotate(txt, xy=(mx, my), xytext=(dx, dy), textcoords='offset points',
+                                                ha='left' if dx>0 else 'right', va='bottom' if dy>0 else 'top',
+                                                bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='black'), zorder=6)
+                        m['annot'] = ann
+                    except Exception:
+                        m['annot'] = None
+                    # 只重绘 canvas1
+                    try:
+                        self.canvas1.draw()
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+                return
+        except Exception:
+            pass
         
         # 保存当前坐标轴范围
         if not self.is_dragging:
@@ -842,6 +1278,7 @@ class PlotWindow(QDialog):
             try:
                 self.ax1.clear()
                 colors = ['b-', 'g-', 'r-', 'c-', 'm-', 'y-', 'k-']
+                markers = ['o', 's', '^', 'v', 'D', 'p', '*']
             
                 # 确定要显示的曲线
                 curves_to_display = list(self.selected_curves) if self.selected_curves else list(self.y_data_dict.keys())
@@ -852,25 +1289,56 @@ class PlotWindow(QDialog):
                     label = self.labels.get(col_idx, f"曲线 {col_idx+1}")
                 
                     if col_idx in curves_to_display:
-                        # 显示选中的曲线
+                        # 显示选中的曲线，保留点标记
+                        try:
+                            color_char = colors[i % len(colors)][0]
+                        except Exception:
+                            color_char = 'b'
+                        marker = markers[i % len(markers)]
+                        try:
+                            markevery = max(1, len(self.y_data_dict[col_idx])//20)
+                        except Exception:
+                            markevery = 1
                         self.ax1.plot(
                             self.x_data_dict[col_idx], 
                             self.y_data_dict[col_idx], 
-                            color, label=label, picker=3, linewidth=2 if col_idx in self.selected_curves else 1
+                            color=color_char, marker=marker, linestyle='-',
+                            markevery=markevery, markersize=5, label=label, picker=3,
+                            linewidth=2 if col_idx in self.selected_curves else 1
                         )
                     elif not self.selected_curves:
-                        # 如果没有选择任何曲线，显示所有曲线
+                        # 如果没有选择任何曲线，显示所有曲线（保留点标记）
+                        try:
+                            color_char = colors[i % len(colors)][0]
+                        except Exception:
+                            color_char = 'b'
+                        marker = markers[i % len(markers)]
+                        try:
+                            markevery = max(1, len(self.y_data_dict[col_idx])//20)
+                        except Exception:
+                            markevery = 1
                         self.ax1.plot(
                             self.x_data_dict[col_idx], 
                             self.y_data_dict[col_idx], 
-                            color, label=label, picker=3
+                            color=color_char, marker=marker, linestyle='-',
+                            markevery=markevery, markersize=5, label=label, picker=3
                         )
                     else:
-                        # 其他曲线以低透明度显示作为参考
+                        # 其他曲线以低透明度显示作为参考（保留点标记）
+                        try:
+                            color_char = colors[i % len(colors)][0]
+                        except Exception:
+                            color_char = 'b'
+                        marker = markers[i % len(markers)]
+                        try:
+                            markevery = max(1, len(self.y_data_dict[col_idx])//20)
+                        except Exception:
+                            markevery = 1
                         self.ax1.plot(
                             self.x_data_dict[col_idx], 
                             self.y_data_dict[col_idx], 
-                            color, label=label, picker=3, alpha=0.3
+                            color=color_char, marker=marker, linestyle='-',
+                            markevery=markevery, markersize=3, label=label, picker=3, alpha=0.3
                         )
             
                 # 高亮选择区域（如果有）
@@ -891,9 +1359,79 @@ class PlotWindow(QDialog):
                                 self.y_data_dict[col_idx][start_idx:end_idx+1], 
                                 color=base_color, alpha=0.3
                             )
+
+                    # 实时更新选中区域的统计信息，跟随当前显示的曲线
+                    try:
+                        # 使用统一的统计显示格式更新统计区域
+                        try:
+                            self.update_stats_display()
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
                 
                 # 绘制参考线
                 self.draw_reference_lines()
+
+                # 在拖拽实时绘制中也重绘持久标注点及其注释，避免标注在拖拽时消失
+                try:
+                    xlim = self.ax1.get_xlim()
+                    ylim = self.ax1.get_ylim()
+                    x_mid = (xlim[0] + xlim[1]) / 2.0
+                    y_mid = (ylim[0] + ylim[1]) / 2.0
+                    for m in getattr(self, 'point_markers', []):
+                        mx, my = m.get('x'), m.get('y')
+                        # 移除旧的 artist/annotation（如果存在），避免重复绘制
+                        try:
+                            a = m.get('artist')
+                            if a is not None:
+                                try:
+                                    a.remove()
+                                except Exception:
+                                    pass
+                                m['artist'] = None
+                        except Exception:
+                            pass
+                        try:
+                            ann_old = m.get('annot')
+                            if ann_old is not None:
+                                try:
+                                    ann_old.remove()
+                                except Exception:
+                                    pass
+                                m['annot'] = None
+                        except Exception:
+                            pass
+
+                        # 绘制空心圆点作为标注并保存 artist 引用
+                        try:
+                            artists = self.ax1.plot([mx], [my], 'o', markerfacecolor='none', markeredgecolor='black', markersize=8, zorder=5)
+                            if artists:
+                                m['artist'] = artists[0]
+                        except Exception:
+                            m['artist'] = None
+
+                        # 文本放置在点的象限，优先使用 marker 中的 quadrant
+                        quad = m.get('quad')
+                        if quad is None:
+                            dx = 10 if mx < x_mid else -10
+                            dy = 10 if my < y_mid else -10
+                        else:
+                            sx, sy = quad
+                            dx = 10 if sx > 0 else -10
+                            dy = 10 if sy > 0 else -10
+                        ha = 'left' if dx > 0 else 'right'
+                        va = 'bottom' if dy > 0 else 'top'
+                        label = m.get('label_text') if m.get('label_text') else self.labels.get(m.get('curve'), f"曲线 {m.get('curve')+1}")
+                        txt = f"{label}: x={mx:.4f}, y={my:.4f}"
+                        try:
+                            ann = self.ax1.annotate(txt, xy=(mx, my), xytext=(dx, dy), textcoords='offset points',
+                                              ha=ha, va=va, bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='black'), zorder=6)
+                            m['annot'] = ann
+                        except Exception:
+                            m['annot'] = None
+                except Exception:
+                    pass
                 
                 title = "所有曲线" if not self.selected_curves else f"选中 {len(self.selected_curves)} 条曲线"
                 self.ax1.set_title(title)
@@ -918,7 +1456,16 @@ class PlotWindow(QDialog):
         if self.toolbar_active:
             return
 
-        # 如果没有正在拖拽，则忽略
+        # 如果正在拖拽标签，结束标签拖拽
+        try:
+            if getattr(self, 'label_dragging', False):
+                self.label_dragging = False
+                self.dragging_marker = None
+                return
+        except Exception:
+            pass
+
+        # 如果没有正在拖拽区域，则忽略
         if not getattr(self, 'is_dragging', False):
             return
 
@@ -950,10 +1497,10 @@ class PlotWindow(QDialog):
                 pass
 
         # 更新统计信息显示
-        if all_stats:
-            self.stats_info.setPlainText("\n".join(all_stats))
-        else:
-            self.stats_info.setPlainText("选定区域无有效数据")
+        try:
+            self.update_stats_display()
+        except Exception:
+            pass
 
         # 更新第二个子图 - 显示选定区域
         try:
@@ -992,10 +1539,8 @@ class PlotWindow(QDialog):
             self.ax2.grid(True)
             self.ax2.ticklabel_format(style='plain', axis='y')
 
-            self.figure2.tight_layout()
+            self.canvas1.draw()
             self.canvas2.draw()
-
-            # 恢复第一个子图的坐标轴范围
             if hasattr(self, 'original_xlim') and hasattr(self, 'original_ylim'):
                 self.ax1.set_xlim(self.original_xlim)
                 self.ax1.set_ylim(self.original_ylim)
@@ -1006,6 +1551,60 @@ class PlotWindow(QDialog):
         # 重置状态
         self.drag_start_x = None
         self.is_dragging = False
+
+    def keyPressEvent(self, event):
+        """捕获 Shift 键按下以进入临时选择模式"""
+        try:
+            if event.key() == Qt.Key_Shift and not self.shift_pressed:
+                self.shift_pressed = True
+                # 备份当前选择
+                self.shift_backup_selected = set(self.selected_curves)
+                self.shift_temp_selected = set(self.selected_curves)
+        except Exception:
+            pass
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """捕获 Shift 键释放并恢复备份选择"""
+        try:
+            if event.key() == Qt.Key_Shift and self.shift_pressed:
+                self.shift_pressed = False
+                # 将按住 Shift 期间的临时选择应用为新的选择
+                if self.shift_temp_selected is not None:
+                    self.selected_curves = set(self.shift_temp_selected)
+                # 清理临时状态
+                self.shift_backup_selected = None
+                self.shift_temp_selected = set()
+                self.update_curve_buttons_style()
+                try:
+                    self.redraw_plots()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        super().keyReleaseEvent(event)
+
+    def clear_point_markers(self):
+        """清除所有右键标注的点和提示"""
+        try:
+            # 清空标注点数据（重绘时将不再绘制）
+            self.point_markers = []
+            # 隐藏可能存在的一次性提示
+            self.hide_coord_tooltip()
+            try:
+                self.redraw_plots()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def closeEvent(self, event):
+        """窗口关闭时清理坐标标签等状态"""
+        try:
+            self.clear_point_markers()
+        except Exception:
+            pass
+        super().closeEvent(event)
     
     def save_figure(self):
         """保存图片"""
