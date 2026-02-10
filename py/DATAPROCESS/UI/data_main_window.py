@@ -169,15 +169,15 @@ class TabScrollBar(QScrollBar):
     def __init__(self, tab_widget, parent=None):
         super().__init__(Qt.Horizontal, parent)
         self.tab_widget = tab_widget
-        self.setMinimumHeight(20)  # 设置最小高度
-        self.setMaximumHeight(25)  # 设置最大高度
+        self.setMinimumHeight(12)  # 设置最小高度
+        self.setMaximumHeight(15)  # 设置最大高度
         
         # 设置滚动条样式，增强可见性
         self.setStyleSheet("""
             QScrollBar:horizontal {
                 border: 1px solid #cccccc;
                 background: #f0f0f0;
-                height: 20px;
+                height: 10px;
                 margin: 0px 20px 0 20px;
             }
             QScrollBar::handle:horizontal {
