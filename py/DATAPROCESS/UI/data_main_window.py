@@ -10,8 +10,9 @@ from functools import partial
 
 from PyQt5.QtWidgets import (QInputDialog,QLineEdit,QApplication, QAbstractItemView, QMainWindow, QPushButton, 
                              QVBoxLayout, QHBoxLayout, QWidget, QMessageBox, 
-                             QTabWidget, QDesktopWidget, QStatusBar, QMenu, QAction, QTabBar)
-from PyQt5.QtCore import Qt, QRect, QPoint, QMimeData, pyqtSignal
+                             QTabWidget, QDesktopWidget, QStatusBar, QMenu, QAction, QTabBar,
+                             QScrollBar, QStyle, QFrame)
+from PyQt5.QtCore import Qt, QRect, QPoint, QMimeData, pyqtSignal, QTimer
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent, QDragLeaveEvent, QPainter, QDrag, QIcon
 
 from SETTINGS import (
@@ -163,12 +164,166 @@ class DraggableTabBar(QTabBar):
                 painter.drawRect(rect)
 
 
+class TabScrollBar(QScrollBar):
+    """自定义标签页滚动条 - 放置在标签页上方"""
+    def __init__(self, tab_widget, parent=None):
+        super().__init__(Qt.Horizontal, parent)
+        self.tab_widget = tab_widget
+        self.setMinimumHeight(20)  # 设置最小高度
+        self.setMaximumHeight(25)  # 设置最大高度
+        
+        # 设置滚动条样式，增强可见性
+        self.setStyleSheet("""
+            QScrollBar:horizontal {
+                border: 1px solid #cccccc;
+                background: #f0f0f0;
+                height: 20px;
+                margin: 0px 20px 0 20px;
+            }
+            QScrollBar::handle:horizontal {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                          stop:0 #888888, stop:1 #666666);
+                border: 1px solid #555555;
+                border-radius: 4px;
+                min-width: 20px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                          stop:0 #666666, stop:1 #444444);
+            }
+            QScrollBar::add-line:horizontal {
+                border: 1px solid #cccccc;
+                background: #e0e0e0;
+                width: 20px;
+                subcontrol-position: right;
+                subcontrol-origin: margin;
+            }
+            QScrollBar::sub-line:horizontal {
+                border: 1px solid #cccccc;
+                background: #e0e0e0;
+                width: 20px;
+                subcontrol-position: left;
+                subcontrol-origin: margin;
+            }
+            QScrollBar::add-line:horizontal:hover, QScrollBar::sub-line:horizontal:hover {
+                background: #d0d0d0;
+            }
+            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+                background: none;
+            }
+        """)
+        
+        # 初始化范围
+        self.setRange(0, max(0, tab_widget.count() - 1))
+        self.setSingleStep(1)
+        self.setPageStep(3)  # 一次滚动3个标签页
+        
+        # 连接标签页变化信号
+        tab_widget.tabBar().tabMoved.connect(self.update_range)
+        tab_widget.tabCloseRequested.connect(self.update_range)
+        tab_widget.currentChanged.connect(self.on_tab_changed)
+        
+        # 定时器用于延迟更新
+        self.update_timer = QTimer()
+        self.update_timer.setSingleShot(True)
+        self.update_timer.timeout.connect(self._delayed_update)
+        
+        # 批量操作标志
+        self.batch_operation = False
+        self.pending_updates = 0
+        
+        # 初始化时强制更新一次
+        self.update_range()
+        
+    def update_range(self):
+        """更新滚动条范围"""
+        # 如果正在进行批量操作，累积更新请求
+        if self.batch_operation:
+            self.pending_updates += 1
+            return
+            
+        # 直接更新而不使用定时器，确保即时响应
+        self._immediate_update()
+    
+    def _immediate_update(self):
+        """立即更新滚动条范围"""
+        count = self.tab_widget.count()
+        new_max = max(0, count - 1)
+        
+        # 只有当范围发生变化时才更新
+        if self.maximum() != new_max:
+            self.setRange(0, new_max)
+        
+        if count > 0:
+            current_index = self.tab_widget.currentIndex()
+            if 0 <= current_index < count:
+                self.setValue(current_index)
+            else:
+                self.setValue(min(self.value(), new_max))
+        else:
+            self.setValue(0)
+            
+        # 强制刷新显示
+        self.update()
+    
+    def _delayed_update(self):
+        """延迟更新滚动条范围（保持兼容性）"""
+        self._immediate_update()
+        # 重置批量操作标志
+        self.batch_operation = False
+        self.pending_updates = 0
+    
+    def start_batch_operation(self):
+        """开始批量操作"""
+        self.batch_operation = True
+        self.pending_updates = 0
+    
+    def end_batch_operation(self):
+        """结束批量操作并执行更新"""
+        self.batch_operation = False
+        # 无论是否有累积的更新请求，都需要在批量操作结束时刷新一次范围
+        # 这样可以覆盖批量添加标签时未触发 update_range 的情况
+        self._immediate_update()
+        # 重置待处理更新计数
+        self.pending_updates = 0
+    
+    def on_tab_changed(self, index):
+        """响应标签页切换"""
+        if 0 <= index <= self.maximum():
+            self.setValue(index)
+    
+    def sliderChange(self, change):
+        """处理滑块变化"""
+        super().sliderChange(change)
+        if change == QScrollBar.SliderValueChange:
+            # 切换到对应的标签页
+            tab_index = self.value()
+            if 0 <= tab_index < self.tab_widget.count():
+                self.tab_widget.setCurrentIndex(tab_index)
+                
+    def wheelEvent(self, event):
+        """处理鼠标滚轮事件"""
+        # 增强滚轮滚动效果
+        delta = event.angleDelta().y()
+        step = 1 if delta > 0 else -1
+        current_value = self.value()
+        new_value = current_value - step
+        
+        if 0 <= new_value <= self.maximum():
+            self.setValue(new_value)
+            # 同步切换标签页
+            self.tab_widget.setCurrentIndex(new_value)
+        
+        event.accept()
+
+
 class DataMainWindow(QMainWindow):
     """CSV数据处理主窗口类"""
     request_resize = pyqtSignal(int, int)
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        # 初始化UI（UI中会创建并赋值 `self.tab_scrollbar`）
         self.init_ui()
         self.viewers = {}  # 存储已打开的查看器
         self.setAcceptDrops(True)  # 启用拖拽
@@ -206,6 +361,9 @@ class DataMainWindow(QMainWindow):
         
         # 创建主布局
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(2)  # 减少间距
+        main_layout.setContentsMargins(5, 5, 5, 5)  # 设置边距
+        
         # 创建顶部按钮布局
         top_layout = QHBoxLayout()
         self.back_button = QPushButton("返回主菜单")
@@ -237,6 +395,12 @@ class DataMainWindow(QMainWindow):
         
         main_layout.addLayout(button_layout)
 
+        # 创建标签页容器（包含滚动条和标签页）
+        tab_container = QWidget()
+        tab_layout = QVBoxLayout(tab_container)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(0)
+        
         # 创建标签页控件
         self.tab_widget = QTabWidget()
         # 使用自定义的可拖拽标签栏
@@ -245,13 +409,19 @@ class DataMainWindow(QMainWindow):
         self.tab_widget.setTabBar(draggable_tab_bar)
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.tabCloseRequested.connect(self.close_tab)
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)  # 连接标签页切换信号
         self.tab_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tab_widget.customContextMenuRequested.connect(self.show_tab_context_menu)
         
         # 禁用标签页双击编辑功能
         self.tab_widget.tabBarDoubleClicked.connect(self.ignore_tab_double_click)
         
-        main_layout.addWidget(self.tab_widget)
+        # 添加标签页滚动条（放在标签页上方）
+        self.tab_scrollbar = TabScrollBar(self.tab_widget)
+        tab_layout.addWidget(self.tab_scrollbar)
+        tab_layout.addWidget(self.tab_widget)
+        
+        main_layout.addWidget(tab_container)
         
         # 状态栏
         self.status_bar = QStatusBar()
@@ -524,8 +694,8 @@ class DataMainWindow(QMainWindow):
         viewer.temp_file_path = temp_file_path  # 保存临时文件路径，用于后续删除
         viewer.tab_title = file_name  # 初始化标签页标题
         
-        # 添加标签页
-        tab_index = self.tab_widget.addTab(viewer, file_name)
+        # 添加标签页并同步滚动条
+        tab_index = self.add_tab_with_scroll_sync(viewer, file_name)
         self.tab_widget.setCurrentIndex(tab_index)
         self.viewers[temp_file_path] = viewer
         self.status_bar.showMessage(f'已创建新文件: {file_name} @Silver')
@@ -560,20 +730,34 @@ class DataMainWindow(QMainWindow):
     
     def open_files(self, file_paths):
         """打开多个CSV文件"""
-        for file_path in file_paths:
+        # 开始批量操作模式
+        if self.tab_scrollbar:
+            self.tab_scrollbar.start_batch_operation()
+        
+        success_count = 0
+        error_count = 0
+        total_files = len(file_paths)
+        
+        for i, file_path in enumerate(file_paths):
+            # 更新状态栏显示进度
+            self.status_bar.showMessage(f'正在导入文件 ({i+1}/{total_files}): {os.path.basename(file_path)} @Silver')
+            QApplication.processEvents()  # 处理界面事件，确保状态栏更新显示
+            
             # 检查文件是否已打开
             if file_path in self.viewers:
                 self.status_bar.showMessage(f'文件已在标签页中: {os.path.basename(file_path)} @Silver')
                 # 切换到对应的标签页
-                for i in range(self.tab_widget.count()):
-                    if self.tab_widget.widget(i).file_path == file_path:
-                        self.tab_widget.setCurrentIndex(i)
+                for j in range(self.tab_widget.count()):
+                    if self.tab_widget.widget(j).file_path == file_path:
+                        self.tab_widget.setCurrentIndex(j)
+                        # 同步滚动条
+                        if self.tab_scrollbar:
+                            self.tab_scrollbar.setValue(j)
                         break
                 continue
             
             # 打开新的数据查看窗口作为标签页
             try:
-
                 from DATAPROCESS.CONTROLLER import DataViewer
 
                 # 创建DataViewer实例，传入默认编码utf-8
@@ -581,13 +765,33 @@ class DataMainWindow(QMainWindow):
                 # 为viewer添加file_path属性，以便在关闭标签页时使用
                 viewer.file_path = file_path
                 tab_title = os.path.basename(file_path)
+                
+                # 添加标签页（在批量操作期间不触发滚动条更新）
                 tab_index = self.tab_widget.addTab(viewer, tab_title)
-                self.tab_widget.setCurrentIndex(tab_index)
                 self.viewers[file_path] = viewer
-                self.status_bar.showMessage(f'已打开文件: {os.path.basename(file_path)} @Silver')
+                success_count += 1
+                
+                # 只在最后一个文件时设置为当前标签页
+                if file_path == file_paths[-1]:
+                    self.tab_widget.setCurrentIndex(tab_index)
+                    
             except Exception as e:
-                QMessageBox.critical(self, "错误", f"无法打开文件: {str(e)}")
-    
+                error_count += 1
+                QMessageBox.critical(self, "错误", f"无法打开文件 {os.path.basename(file_path)}: {str(e)}")
+        
+        # 结束批量操作模式并更新滚动条
+        if self.tab_scrollbar:
+            self.tab_scrollbar.end_batch_operation()
+        
+        # 强制处理所有待处理的事件，确保UI完全更新
+        QApplication.processEvents()
+        
+        # 显示批量导入结果
+        if success_count > 0:
+            self.status_bar.showMessage(f'成功导入 {success_count} 个文件 @Silver')
+        if error_count > 0:
+            self.status_bar.showMessage(f'导入完成: {success_count} 成功, {error_count} 失败 @Silver')
+
     def open_file(self):
         """打开CSV文件"""
         # 使用getOpenFileNames支持多文件选择（使用封装函数）
@@ -613,7 +817,7 @@ class DataMainWindow(QMainWindow):
             file_path = widget.file_path
             if file_path in self.viewers:
                 del self.viewers[file_path]
-        self.tab_widget.removeTab(index)
+        self.remove_tab_with_scroll_sync(index)
 
     def edit_tab_title(self, index):
         """编辑标签页标题"""
@@ -642,3 +846,32 @@ class DataMainWindow(QMainWindow):
             widget.setWindowTitle(f"数据查看 - {new_title}")
             
             self.status_bar.showMessage(f'标签页已重命名为: {new_title} @Silver')
+
+    def on_tab_changed(self, index):
+        """标签页切换时的处理"""
+        # 同步滚动条位置
+        if self.tab_scrollbar and 0 <= index < self.tab_widget.count():
+            self.tab_scrollbar.setValue(index)
+            
+        # 更新状态栏信息
+        if index >= 0:
+            tab_text = self.tab_widget.tabText(index)
+            self.status_bar.showMessage(f'当前标签页: {tab_text} @Silver')
+        else:
+            self.status_bar.showMessage('就绪 @Silver')
+
+    def sync_scrollbar_with_tabs(self):
+        """同步滚动条与标签页数量"""
+        if self.tab_scrollbar:
+            self.tab_scrollbar.update_range()
+
+    def add_tab_with_scroll_sync(self, widget, title):
+        """添加标签页并同步滚动条"""
+        tab_index = self.tab_widget.addTab(widget, title)
+        self.sync_scrollbar_with_tabs()
+        return tab_index
+
+    def remove_tab_with_scroll_sync(self, index):
+        """移除标签页并同步滚动条"""
+        self.tab_widget.removeTab(index)
+        self.sync_scrollbar_with_tabs()
